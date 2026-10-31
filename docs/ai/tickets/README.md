@@ -29,6 +29,7 @@ Open backlog = files at this level. Finished tickets move to `done/`. Plan: `../
 | T23 | Right-click menus: Home, header, details | frontend-developer | foundation | 8 | done |
 | T24 | Right-click menus: Projects | frontend-developer | foundation | 8 | done |
 | T25 | Right-click menus: Notes and Life map | frontend-developer | foundation | 8 | done |
+| T26 | Jira, Calendar and Gmail through Claude connectors | backend-developer | none | 9 | done |
 
 ## Assumptions taken (say if any is wrong)
 

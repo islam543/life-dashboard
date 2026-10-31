@@ -1,8 +1,16 @@
 import type { JiraIssue } from "../../shared/types";
+import { DEFAULT_JIRA_SITE } from "../config";
+import { CONNECTORS_FILE, connectorSourceView } from "../connectors/validate";
+import { enabledServices } from "../connectors/tools";
+import { connectorsIntervalMs } from "../scheduler";
 import type { Collector, CollectorContext, CollectorResult } from "./types";
 
 /**
  * Jira Cloud collector: open issues assigned to the current user.
+ *
+ * Two paths (ticket T26): with JIRA_API_TOKEN in .env it calls the Jira REST API as before.
+ * Without it, it reads data/connectors.json, which the Claude connector run fills
+ * (server/connectors/run.ts). The collector itself never starts that run.
  *
  * Security (ticket T05): the email and API token come only from `ctx.config.jira`, are sent
  * only to the normalised JIRA_SITE over https, and never appear in a message, in the
@@ -48,6 +56,11 @@ export function normaliseSite(raw: string): string | null {
   const withoutScheme = raw.trim().replace(/^https?:\/\//i, "");
   const host = (withoutScheme.split(/[/?#]/, 1)[0] ?? "").toLowerCase();
   return HOST.test(host) ? host : null;
+}
+
+/** Allowed Jira hosts for connector links: the configured JIRA_SITE first, then the default. */
+export function jiraSites(configuredSite: string): string[] {
+  return [...new Set([normaliseSite(configuredSite) ?? DEFAULT_JIRA_SITE, DEFAULT_JIRA_SITE])];
 }
 
 export function searchUrl(site: string, nextPageToken: string | undefined, maxResults: number): string {
@@ -176,11 +189,25 @@ function safeMessage(err: unknown): string {
   return MESSAGES.unreachable;
 }
 
+/** The connector path: issues from data/connectors.json, with a status for their age. */
+export async function collectFromConnector(ctx: CollectorContext<"jira">): Promise<CollectorResult<"jira">> {
+  const raw = await ctx.store.read<unknown>(CONNECTORS_FILE, null);
+  const view = connectorSourceView("jira", raw, {
+    now: ctx.now,
+    everyMs: connectorsIntervalMs(ctx.config.connectors.everyMin),
+    hasTools: enabledServices().includes("jira"),
+    jiraSites: jiraSites(ctx.config.jira.site),
+  });
+  return { status: view.status, message: view.message, data: { jira: view.items } };
+}
+
 export const jiraCollector: Collector<"jira"> = {
   key: "jira",
   async collect(ctx: CollectorContext<"jira">): Promise<CollectorResult<"jira">> {
     const { email, apiToken } = ctx.config.jira;
-    if (!email || !apiToken) {
+    // No token: the Claude connector path. A token without an email is a half-done REST setup.
+    if (!apiToken) return collectFromConnector(ctx);
+    if (!email) {
       return { status: "not_connected", message: MESSAGES.notConnected, data: { jira: [] } };
     }
     const site = normaliseSite(ctx.config.jira.site);

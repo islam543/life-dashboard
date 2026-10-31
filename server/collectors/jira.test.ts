@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
+import path from "node:path";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnvSource } from "../config";
 import { loadConfig } from "../config";
-import type { Store } from "../store";
-import { FIELDS, JQL, MAX_ISSUES, MESSAGES, jiraCollector, normaliseSite } from "./jira";
+import { CONNECTORS_FILE, emptyConnectorsCache, type ConnectorsCache } from "../connectors/validate";
+import { createStore, type Store } from "../store";
+import { FIELDS, JQL, MAX_ISSUES, MESSAGES, jiraCollector, jiraSites, normaliseSite } from "./jira";
 import type { CollectorContext } from "./types";
 
 type RawIssue = Record<string, unknown> & { key: string; id: string };
@@ -56,15 +59,122 @@ afterEach(() => {
 });
 
 describe("missing credentials", () => {
-  it.each([
-    ["no token", { JIRA_EMAIL: EMAIL }],
-    ["no email", { JIRA_API_TOKEN: TOKEN }],
-    ["nothing", {}],
-    ["blank values", { JIRA_EMAIL: "  ", JIRA_API_TOKEN: "" }],
-  ])("returns not_connected with empty data (%s)", async (_label, env: EnvSource) => {
-    const result = await jiraCollector.collect(ctx(env));
+  it("a token without an email is a half-done REST setup: not_connected, no request", async () => {
+    const result = await jiraCollector.collect(ctx({ JIRA_API_TOKEN: TOKEN }));
     expect(result).toEqual({ status: "not_connected", message: "Add JIRA_EMAIL and JIRA_API_TOKEN to .env", data: { jira: [] } });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("without JIRA_API_TOKEN: the Claude connector cache (T26)", () => {
+  let tmp: string;
+  let store: Store;
+  const MIN = 60_000;
+
+  beforeEach(async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), "life-dashboard-jira-connector-"));
+    store = createStore(tmp);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  const connectorCtx = (env: EnvSource): CollectorContext<"jira"> => ({ ...ctx(env), store });
+  const issue = (key: string, extra: Record<string, unknown> = {}) => ({
+    key, summary: `Summary ${key}`, status: "In Progress", statusCategory: "inprogress" as const, priority: "High",
+    dueDate: "2026-11-02", updated: "2026-10-29T10:00:00.000Z", project: "FastBind",
+    url: `https://qicbizdev.atlassian.net/browse/${key}`, blocked: false, ...extra,
+  });
+  function cache(ageMin: number | null, patch: Partial<ConnectorsCache["jira"]> = {}): ConnectorsCache {
+    const at = ageMin === null ? null : new Date(NOW.getTime() - ageMin * MIN).toISOString();
+    return {
+      ...emptyConnectorsCache(),
+      fetchedAt: new Date(NOW.getTime() - 5 * MIN).toISOString(),
+      jira: { items: at ? [issue("FB-12"), issue("FB-13", { blocked: true })] : [], fetchedAt: at, lastStatus: "ok", ...patch },
+    };
+  }
+  const save = (value: unknown) => store.write(CONNECTORS_FILE, value);
+
+  it("before the first run: never_run with an empty list, and no Jira request", async () => {
+    const result = await jiraCollector.collect(connectorCtx({}));
+    expect(result).toEqual({ status: "never_run", message: "Waiting for the first Claude connector run", data: { jira: [] } });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["nothing set", {}],
+    ["blank values", { JIRA_EMAIL: "  ", JIRA_API_TOKEN: "" }],
+    ["email only", { JIRA_EMAIL: EMAIL }],
+  ])("fresh data is ok and says its source (%s)", async (_label, env: EnvSource) => {
+    await save(cache(30));
+    const result = await jiraCollector.collect(connectorCtx(env));
+    expect(result.status).toBe("ok");
+    expect(result.message).toMatch(/^Via Claude connector, fetched \d{2}:\d{2}$/);
+    expect(result.data?.jira.map((i) => [i.key, i.blocked])).toEqual([["FB-12", false], ["FB-13", true]]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("data older than twice the interval is stale but still shown", async () => {
+    await save(cache(121));
+    const result = await jiraCollector.collect(connectorCtx({}));
+    expect(result.status).toBe("stale");
+    expect(result.message).toMatch(/^Via Claude connector, last fetched /);
+    expect(result.data?.jira).toHaveLength(2);
+  });
+
+  it("the freshness window follows CONNECTORS_EVERY_MIN (floored at 15)", async () => {
+    await save(cache(40));
+    expect((await jiraCollector.collect(connectorCtx({ CONNECTORS_EVERY_MIN: "15" }))).status).toBe("stale");
+    expect((await jiraCollector.collect(connectorCtx({ CONNECTORS_EVERY_MIN: "5" }))).status).toBe("stale");
+    expect((await jiraCollector.collect(connectorCtx({ CONNECTORS_EVERY_MIN: "30" }))).status).toBe("ok");
+  });
+
+  it("a failed last run with no data is an error with a short message", async () => {
+    await save(cache(null, { lastStatus: "error", error: "Claude did not answer within 180 seconds." }));
+    const result = await jiraCollector.collect(connectorCtx({}));
+    expect(result).toEqual({
+      status: "error",
+      message: "Claude did not answer within 180 seconds. (via Claude connector)",
+      data: { jira: [] },
+    });
+  });
+
+  it("a failed last run keeps the previous good data and mentions the failure", async () => {
+    await save(cache(30, { lastStatus: "error", error: "Run claude in a terminal and log in" }));
+    const result = await jiraCollector.collect(connectorCtx({}));
+    expect(result.status).toBe("ok");
+    expect(result.message).toMatch(/Last run: Run claude in a terminal and log in$/);
+    expect(result.data?.jira).toHaveLength(2);
+  });
+
+  it("a corrupt cache reads as missing", async () => {
+    await writeFile(store.pathOf(CONNECTORS_FILE), "{ not json", "utf8");
+    expect((await jiraCollector.collect(connectorCtx({}))).status).toBe("never_run");
+    await save({ fetchedAt: 42, jira: "nope" });
+    expect((await jiraCollector.collect(connectorCtx({}))).status).toBe("never_run");
+  });
+
+  it("cached links are re-checked: a foreign host is replaced by the issue link on the Jira site", async () => {
+    const bad = cache(10);
+    bad.jira.items = [issue("FB-12", { url: "https://evil.example.com/browse/FB-12" }), issue("bad key")];
+    await save(bad);
+    const result = await jiraCollector.collect(connectorCtx({}));
+    expect(result.data?.jira).toEqual([expect.objectContaining({ key: "FB-12", url: "https://qicbizdev.atlassian.net/browse/FB-12" })]);
+  });
+
+  it("the token path still wins: with JIRA_EMAIL and JIRA_API_TOKEN it calls REST and ignores the cache", async () => {
+    await save(cache(10));
+    respondWith(() => json({ issues: [], isLast: true }));
+    const result = await jiraCollector.collect(connectorCtx(CONNECTED));
+    expect(result).toEqual({ status: "ok", data: { jira: [] } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("jiraSites puts the configured site first and always allows the default", () => {
+    expect(jiraSites("https://acme.atlassian.net/")).toEqual(["acme.atlassian.net", "qicbizdev.atlassian.net"]);
+    expect(jiraSites("qicbizdev.atlassian.net")).toEqual(["qicbizdev.atlassian.net"]);
+    expect(jiraSites("not a host")).toEqual(["qicbizdev.atlassian.net"]);
   });
 });
 

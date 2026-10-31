@@ -1,0 +1,34 @@
+{
+  "jira": {
+    "status": "ok",
+    "issues": [
+      { "key": "FB-12", "summary": "Ship FastBind 2.1", "status": "In Progress", "statusCategory": "inprogress", "priority": "High",
+        "dueDate": "2026-11-02", "updated": "2026-10-29T10:00:00.000+0300", "project": "FastBind", "labels": ["release"],
+        "url": "https://qicbizdev.atlassian.net/browse/FB-12" },
+      { "key": "FB-13", "summary": "Wait for underwriting rules", "status": "Blocked", "statusCategory": "To Do", "priority": "Medium",
+        "dueDate": null, "updated": "2026-10-28T08:00:00Z", "project": "FastBind", "labels": [] },
+      { "key": "OPS-7", "summary": "Rotate certificates", "status": "Selected", "statusCategory": "new", "priority": "Low",
+        "dueDate": "2026-11-10", "updated": "2026-10-27T08:00:00Z", "project": { "key": "OPS", "name": "Operations" }, "labels": ["needs-unblock"] },
+      { "key": "FB-1", "summary": "Old and closed", "status": "Done", "statusCategory": "done", "priority": "Low",
+        "dueDate": null, "updated": "2026-09-01T08:00:00Z", "project": "FastBind", "labels": [] }
+    ]
+  },
+  "calendar": {
+    "status": "ok",
+    "events": [
+      { "id": "evt-1", "title": "Sprint review", "start": "2026-10-31T10:00:00+03:00", "end": "2026-10-31T11:00:00+03:00",
+        "url": "https://calendar.google.com/calendar/event?eid=abc" },
+      { "id": "evt-2", "title": "National Day", "start": "2026-11-01", "end": "2026-11-02" },
+      { "id": "evt-3", "title": "Standup", "start": "2026-11-01T09:00", "end": "2026-11-01T09:15", "url": "https://www.google.com/calendar/event?eid=def" },
+      { "id": "evt-4", "title": "Declined offsite", "start": "2026-11-01T12:00:00+03:00", "end": "2026-11-01T13:00:00+03:00", "responseStatus": "declined" }
+    ]
+  },
+  "email": {
+    "status": "ok",
+    "messages": [
+      { "id": "m-1", "from": "Sara <sara@example.com>", "subject": "UAT sign-off", "receivedAt": "2026-10-31T07:15:00Z",
+        "url": "https://mail.google.com/mail/u/0/#inbox/m-1", "body": "BODY TEXT MUST NOT SURVIVE", "snippet": "SNIPPET MUST NOT SURVIVE" },
+      { "id": "m-2", "from": "noreply@example.com", "subject": "", "receivedAt": "2026-10-30T20:00:00+03:00" }
+    ]
+  }
+}

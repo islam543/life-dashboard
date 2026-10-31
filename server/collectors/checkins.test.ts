@@ -129,7 +129,7 @@ describe("calendar and email stubs", () => {
   it("calendar is not_connected with an empty list", async () => {
     expect(await calendarCollector.collect(ctx<"calendar">({ calendar: [] }))).toEqual({
       status: "not_connected",
-      message: "Connect Google Calendar",
+      message: "Sign in for Claude Code: run claude, type /mcp, pick claude.ai Google Calendar",
       data: { calendar: [] },
     });
   });
@@ -137,7 +137,7 @@ describe("calendar and email stubs", () => {
   it("email is not_connected with an empty list", async () => {
     expect(await emailCollector.collect(ctx<"email">({ email: [] }))).toEqual({
       status: "not_connected",
-      message: "Connect Gmail",
+      message: "Sign in for Claude Code: run claude, type /mcp, pick claude.ai Gmail",
       data: { email: [] },
     });
   });

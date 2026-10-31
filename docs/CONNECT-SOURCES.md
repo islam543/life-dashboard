@@ -8,33 +8,46 @@ Checked on 2026-10-31.
 
 | Service | Connector | Status on this PC |
 |---|---|---|
-| Jira (`qicbizdev.atlassian.net`) | Atlassian | Connected. A test search returned your 8 open issues. |
-| Work calendar | Google Calendar | Connected |
-| Work email | Gmail | Connected |
+| Jira (`qicbizdev.atlassian.net`) | Atlassian | Working. The dashboard reads it in the background. |
+| Work calendar | Google Calendar | Signed in at claude.ai, but not yet for Claude Code (see below) |
+| Work email | Gmail | Signed in at claude.ai, but not yet for Claude Code (see below) |
 
 Your work address (`bd.qatarinsurance.com`) runs on Google Workspace, so your work mail and calendar are Gmail and Google Calendar. A DNS check of the domain's mail servers (MX records) confirmed this.
 
-**What's missing is on the dashboard side.** Today the dashboard reads Jira only with an API token from `.env`, and Calendar and Email are empty placeholders. It needs one new data collector (a piece of code that fetches data on a schedule) that asks Claude to read these services through your connectors. Claude already uses your login the same way for the "Next moves" suggestions.
+## Option A (recommended, built): through your Claude connectors, no keys
 
-## Option A (recommended): through your Claude connectors, no keys
-
-How it would work:
-1. Every 30 to 60 minutes, while the dashboard is running, it starts a background Claude run (`claude -p`).
+How it works:
+1. About a minute after the dashboard starts, and then every hour, it starts a background Claude run (`claude -p`). Pressing Refresh also starts one if the last run is more than 10 minutes old. The dashboard does not wait for it; the panels update when it finishes, usually within a minute.
 2. That run may only use **read** tools:
-   - Jira: search your open issues.
-   - Calendar: list today's and tomorrow's events.
-   - Gmail: list recent unread or important mail. It reads the sender and subject only, not the full message.
-3. Claude returns plain data (JSON). The dashboard checks it and shows it in the Jira, Calendar and Email panels.
+   - Jira: search your open issues (up to 50).
+   - Calendar: list your events from now to the end of tomorrow, skipping ones you declined (up to 30).
+   - Gmail: list unread inbox mail from the last 2 days (up to 20). It reads the sender and subject only, never the message itself.
+3. Claude returns plain data (JSON). The dashboard checks it and shows it in the Jira, Calendar and Email panels. Each panel says "Via Claude connector" and when the data was fetched.
 
-What you need to do: nothing new. If a connector ever signs out, reconnect it at claude.ai, then Settings, then Connectors.
+What you need to do:
+- **Jira:** nothing.
+- **Calendar and Gmail:** Claude Code needs its own sign-in to them. Being signed in at claude.ai is not enough for background runs. Until you do this, those panels say "Sign in for Claude Code".
+  1. Open a terminal and type `claude`.
+  2. Type `/mcp`.
+  3. Pick **claude.ai Google Calendar** and sign in. Do the same for **claude.ai Gmail**.
+  4. Tell Claude in this project that you signed in. It then adds the exact read-only tool names to the dashboard (the file `server/connectors/tools.ts`).
+- **Optional:** to change how often it runs, add `CONNECTORS_EVERY_MIN=30` (any number of minutes, 15 or more) to `.env` and restart the dashboard.
+
+Panel states:
+- **Fresh data:** fetched within the last 2 runs (2 hours by default).
+- **Stale:** older than that. The old data stays visible and the panel says when it was fetched.
+- **Waiting for the first run:** right after the very first start.
+- **Error:** the last run failed and there is no data yet. The message says why, for example "Run claude in a terminal and log in".
 
 Trade-offs:
-- Each refresh takes about 30 to 90 seconds and counts toward your Claude usage. That is why it runs every 30 to 60 minutes, not every minute.
-- It only works while your Claude login is valid. If the login expires, the panels show "not connected" again.
-- Safety: an email could contain text that tries to give Claude instructions. Three things guard against it:
-  - The run has no tools that can send, edit, delete or run commands.
-  - It sees only senders and subjects.
-  - The dashboard treats whatever comes back as data, never as commands.
+- Each run takes about 15 to 90 seconds and counts toward your Claude usage. That is why it runs once an hour, not every minute.
+- It only works while your Claude login is valid. If the login expires, the panels keep the last data and show the error.
+- If `JIRA_API_TOKEN` is in `.env`, Jira uses the token instead (Option B) and the Claude run skips Jira.
+- Safety: an email or issue title could contain text that tries to give Claude instructions. Several things guard against it:
+  - The run has no tools that can send, edit, delete or run commands. It can only load and call the listed read tools.
+  - It sees only senders and subjects, never message bodies.
+  - The dashboard checks everything that comes back: only known fields, length limits, real dates, and links only to Jira, Google Calendar or Gmail addresses.
+  - The dashboard treats whatever comes back as text to show, never as commands.
 
 ## Option B: API keys, if you would rather not use Claude for this
 

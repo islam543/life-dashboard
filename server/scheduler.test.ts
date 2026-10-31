@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { guardedJob, startScheduler } from "./scheduler";
+import {
+  CONNECTORS_FIRST_RUN_MS,
+  CONNECTORS_MANUAL_MIN_AGE_MS,
+  connectorRunDue,
+  connectorsIntervalMs,
+  guardedJob,
+  startScheduler,
+} from "./scheduler";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -87,6 +94,123 @@ describe("startScheduler", () => {
     await scheduler.started;
     expect(nextMoves).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("[scheduler] collect failed: disk full");
+    scheduler.stop();
+  });
+});
+
+describe("connector runs (T26)", () => {
+  const MIN = 60_000;
+  const base = { collect: async () => undefined, nextMoves: async () => undefined, log: () => undefined };
+
+  it("interval: CONNECTORS_EVERY_MIN, default 60, never below 15", () => {
+    expect(connectorsIntervalMs()).toBe(60 * MIN);
+    expect(connectorsIntervalMs(30)).toBe(30 * MIN);
+    expect(connectorsIntervalMs(15)).toBe(15 * MIN);
+    expect(connectorsIntervalMs(5)).toBe(15 * MIN);
+    expect(connectorsIntervalMs(0)).toBe(60 * MIN);
+    expect(connectorsIntervalMs(-3)).toBe(60 * MIN);
+    expect(connectorsIntervalMs(Number.NaN)).toBe(60 * MIN);
+  });
+
+  it("manual refresh threshold: due when never run or at least 10 minutes old", () => {
+    const now = new Date("2026-10-31T09:00:00.000Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+    expect(CONNECTORS_MANUAL_MIN_AGE_MS).toBe(10 * MIN);
+    expect(connectorRunDue(null, now)).toBe(true);
+    expect(connectorRunDue("garbage", now)).toBe(true);
+    expect(connectorRunDue(ago(5 * MIN), now)).toBe(false);
+    expect(connectorRunDue(ago(10 * MIN - 1), now)).toBe(false);
+    expect(connectorRunDue(ago(10 * MIN), now)).toBe(true);
+    expect(connectorRunDue(ago(-5 * MIN), now)).toBe(true); // clock moved back
+  });
+
+  it("first run 60 s after start, then on the floored interval; never blocks the start-up collect", async () => {
+    vi.useFakeTimers();
+    const connectors = vi.fn(() => new Promise<void>(() => undefined)); // a run that never ends
+    const scheduler = startScheduler({ ...base, connectors, connectorsEveryMs: 1 * MIN });
+    await scheduler.started; // collect finished without waiting for the connector run
+    expect(connectors).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(CONNECTORS_FIRST_RUN_MS - 1);
+    expect(connectors).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(connectors).toHaveBeenCalledTimes(1);
+    scheduler.stop();
+  });
+
+  it("repeats every interval (floor 15 min) without overlapping a running run", async () => {
+    vi.useFakeTimers();
+    let release: (() => void) | null = null;
+    const connectors = vi.fn(() => new Promise<void>((r) => (release = r)));
+    const scheduler = startScheduler({ ...base, connectors, connectorsEveryMs: 1 * MIN });
+    await vi.advanceTimersByTimeAsync(CONNECTORS_FIRST_RUN_MS);
+    expect(connectors).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(14 * MIN);
+    expect(connectors).toHaveBeenCalledTimes(1); // 1 min asked, 15 min floor
+    release!();
+    await vi.advanceTimersByTimeAsync(1 * MIN);
+    expect(connectors).toHaveBeenCalledTimes(2);
+
+    // Still running at the next tick: the tick joins it instead of starting another.
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    expect(connectors).toHaveBeenCalledTimes(2);
+    release!();
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    expect(connectors).toHaveBeenCalledTimes(3);
+
+    scheduler.stop();
+    release!();
+    await vi.advanceTimersByTimeAsync(60 * MIN);
+    expect(connectors).toHaveBeenCalledTimes(3);
+  });
+
+  it("manual refresh starts a run only when the last one is 10+ minutes old, and does not wait for it", async () => {
+    let lastRunAt: string | null = new Date(Date.now() - 5 * MIN).toISOString();
+    let release: (() => void) | null = null;
+    const connectors = vi.fn(() => new Promise<void>((r) => (release = r)));
+    const scheduler = startScheduler({ ...base, connectors, connectorsFirstRunMs: 60 * MIN, connectorsLastRunAt: () => lastRunAt });
+
+    expect(await scheduler.refreshConnectorsIfDue()).toBe(false);
+    expect(connectors).not.toHaveBeenCalled();
+
+    lastRunAt = new Date(Date.now() - 11 * MIN).toISOString();
+    expect(await scheduler.refreshConnectorsIfDue()).toBe(true); // resolves while the run is still going
+    expect(connectors).toHaveBeenCalledTimes(1);
+    expect(scheduler.connectors?.running).toBe(true);
+
+    // A second click while it runs starts nothing.
+    expect(await scheduler.refreshConnectorsIfDue()).toBe(false);
+    expect(connectors).toHaveBeenCalledTimes(1);
+
+    release!();
+    await vi.waitFor(() => expect(scheduler.connectors?.running).toBe(false));
+    lastRunAt = null;
+    expect(await scheduler.refreshConnectorsIfDue()).toBe(true);
+    expect(connectors).toHaveBeenCalledTimes(2);
+    release!();
+    scheduler.stop();
+  });
+
+  it("without a connector job, or after stop, manual refresh does nothing", async () => {
+    const plain = startScheduler(base);
+    expect(plain.connectors).toBeNull();
+    expect(await plain.refreshConnectorsIfDue()).toBe(false);
+    plain.stop();
+
+    const connectors = vi.fn(async () => undefined);
+    const stopped = startScheduler({ ...base, connectors, connectorsLastRunAt: () => null });
+    stopped.stop();
+    expect(await stopped.refreshConnectorsIfDue()).toBe(false);
+    expect(connectors).not.toHaveBeenCalled();
+  });
+
+  it("a failing last-run lookup is logged, not thrown", async () => {
+    const log = vi.fn();
+    const connectors = vi.fn(async () => undefined);
+    const scheduler = startScheduler({ ...base, log, connectors, connectorsLastRunAt: () => Promise.reject(new Error("disk")) });
+    expect(await scheduler.refreshConnectorsIfDue()).toBe(false);
+    expect(log).toHaveBeenCalledWith("[scheduler] connector refresh check failed: disk");
     scheduler.stop();
   });
 });

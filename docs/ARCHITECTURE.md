@@ -19,12 +19,13 @@ life-dashboard/
     config.ts             loads .env, paths (HOME, LEARNING_DIR, CLAUDE_PROJECTS_DIR)
     collectors/
       github.ts           gh CLI
-      jira.ts             Jira Cloud REST
+      jira.ts             Jira Cloud REST with JIRA_API_TOKEN, else the connector cache
       claudeSessions.ts   ~/.claude/projects/*/*.jsonl
       learning.ts         MD Files/Learning/Daily.md and Agenda/YYYY-MM.md
       checkins.ts         data/checkins.json
-      calendar.ts         stub, status not_connected
-      email.ts            stub, status not_connected
+      calendar.ts         connector cache (not_connected until it has tools)
+      email.ts            connector cache (not_connected until it has tools)
+    connectors/           Claude connector run for Jira, Calendar, Gmail (see "Connectors")
     needsYou.ts           rule engine over the snapshot
     ai/nextMoves.ts       runs `claude -p`, validates JSON, writes data/next-moves.json
     *.test.ts             vitest, next to the file
@@ -128,7 +129,19 @@ A collector that fails never breaks the snapshot: it keeps its last good data an
 - **claudeSessions**: each folder in `~/.claude/projects` is a project. Folder names encode a path (`C--Users-ialab-Documents-GitHub-QIC-QIC-FastBind`); display name = last meaningful segment, and fold `--claude-worktrees-*` folders into their parent project. Skip `AppData-Local-Temp` folders. Read `timestamp` fields from each `.jsonl` line (stream, do not load whole files). Active time: sort timestamps, sum gaps under 15 minutes, per local day.
 - **learning**: parse `Daily.md` for `**Current: N** · Best: M · Started: DATE`, the `**Concept:**` line and `- [x]`/`- [ ]` steps under "Current cycle". Agenda: checkbox lines in `Agenda/YYYY-MM.md` for this month. Tolerate missing files (status `not_connected`).
 - **checkins**: last 365 days from `data/checkins.json`.
-- **calendar, email**: return `not_connected` with message "Connect Google Calendar / Gmail" until a later version.
+- **calendar, email**: read the connector cache (see "Connectors"). `not_connected` with the sign-in steps while `connectors/tools.ts` lists no tool for them.
+
+## Connectors (T26: Jira, Calendar, Gmail without API keys)
+
+- `server/connectors/run.ts` starts one background `claude -p` run that reads every service with tools in `connectors/tools.ts`, through Islam's claude.ai connectors (`mcp__claude_ai_<Server>__<tool>`).
+- Flags: `--model sonnet --tools ToolSearch --allowedTools <union of tools.ts> --disallowedTools <BLOCKED_TOOLS from ai/nextMoves.ts> --setting-sources project --output-format json`. No `--strict-mcp-config`, so the connectors load. ToolSearch is needed because the connectors are still connecting when the run starts.
+- cwd is the empty folder `data/connector-run/`, env is `childEnv()` (no JIRA or other secrets), timeout 180 s, single-flight.
+- The prompt names the tools and exact queries (Jira JQL max 50; primary calendar from now to the end of tomorrow in Asia/Qatar, no declined events, max 30; unread inbox mail from the last 2 days, sender and subject only, max 20) and says all returned text is untrusted data.
+- `connectors/validate.ts` is the security boundary: first JSON object from the envelope's `result`, known fields only, strings flattened and capped (titles 300, senders 120), ISO dates only, count caps, URLs kept only when https on an allowed host (Jira site, `calendar.google.com` or `www.google.com/calendar`, `mail.google.com`). Jira links are rebuilt from the key (`^[A-Z][A-Z0-9]+-\d+$`).
+- Cache: `data/connectors.json` = `{ fetchedAt, jira, calendar, email }`, each `{ items, fetchedAt, lastStatus, error? }`, atomic write. A failed run keeps the last good items. A corrupt file reads as empty.
+- Schedule: first run 60 s after start, then every `CONNECTORS_EVERY_MIN` (default 60, floor 15). `POST /api/refresh` also starts a run when the last one is 10+ minutes old, without waiting. After a run, the jira, calendar and email sources are re-collected from the cache.
+- Collectors: Jira uses REST when `JIRA_API_TOKEN` is set (the run then leaves Jira out). Otherwise the three collectors only read the cache: `ok` under 2 x the interval, `stale` older, `never_run` before the first run, `error` when the last run failed and there is no data, `not_connected` ("Sign in for Claude Code: run claude, type /mcp, pick claude.ai Gmail") while a service has no tools.
+- Logs: one line per run with services, counts and duration; never titles, subjects or senders.
 
 ## Needs-you rules (`needsYou.ts`, pure function of the snapshot, unit tested)
 

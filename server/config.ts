@@ -26,6 +26,16 @@ export interface JiraConfig {
   apiToken: string | null;
 }
 
+/** The Claude connector run (ticket T26). No secrets here: the connectors use the claude.ai login. */
+export interface ConnectorsConfig {
+  /** CONNECTORS_EVERY_MIN: minutes between runs. Default 60; the scheduler never goes below 15. */
+  everyMin: number;
+  /** Empty folder used as the run's cwd: data/connector-run. */
+  runDir: string;
+}
+
+export const DEFAULT_CONNECTORS_EVERY_MIN = 60;
+
 export interface Config {
   host: string;
   port: number;
@@ -48,6 +58,7 @@ export interface Config {
   /** Claude Code session logs, one folder per project. */
   claudeProjectsDir: string;
   jira: JiraConfig;
+  connectors: ConnectorsConfig;
 }
 
 export type EnvSource = Record<string, string | undefined>;
@@ -58,6 +69,14 @@ function clean(value: string | undefined): string | null {
   if (value === undefined) return null;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+/** A whole number of minutes from env, or `fallback` when missing or not a positive number. */
+function minutes(value: string | undefined, fallback: number): number {
+  const text = clean(value);
+  if (text === null || !/^\d+(\.\d+)?$/.test(text)) return fallback;
+  const n = Math.round(Number(text));
+  return n > 0 ? n : fallback;
 }
 
 function expandHome(p: string, home: string): string {
@@ -83,13 +102,14 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
   Object.defineProperty(jira, "apiToken", { value: clean(env.JIRA_API_TOKEN), enumerable: false });
 
   const vaultDir = dir("VAULT_DIR", path.join(home, "Desktop", "MD Files", "Working-With-Claude"));
+  const dataDir = path.join(rootDir, "data");
 
   return {
     host: HOST,
     port: PORT,
     webDevPort: WEB_DEV_PORT,
     rootDir,
-    dataDir: path.join(rootDir, "data"),
+    dataDir,
     webDistDir: path.join(rootDir, "web", "dist"),
     home,
     learningDir: dir("LEARNING_DIR", path.join(home, "Desktop", "MD Files", "Learning")),
@@ -97,6 +117,10 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
     notesDir: dir("NOTES_DIR", path.join(vaultDir, "notes")),
     claudeProjectsDir: dir("CLAUDE_PROJECTS_DIR", path.join(home, ".claude", "projects")),
     jira,
+    connectors: {
+      everyMin: minutes(env.CONNECTORS_EVERY_MIN, DEFAULT_CONNECTORS_EVERY_MIN),
+      runDir: path.join(dataDir, "connector-run"),
+    },
   };
 }
 
