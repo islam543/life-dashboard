@@ -31,7 +31,7 @@ import {
   type StreakSummary,
 } from "../lib/kpis";
 import { CountUp } from "../ui/CountUp";
-import { Panel, panelFromSource } from "../ui/Panel";
+import { detailTip, Panel, panelFromSource } from "../ui/Panel";
 import { Sparkline } from "../ui/Sparkline";
 import { StatusDot } from "../ui/StatusDot";
 import styles from "./KpiTiles.module.css";
@@ -50,7 +50,6 @@ const TILE_RADIUS = 10;
 interface Compare {
   dir?: Direction;
   text: ReactNode;
-  title?: string;
 }
 
 interface TileModel {
@@ -68,6 +67,8 @@ interface TileModel {
   visual: ReactNode;
   /** Full sentence for screen readers, read when the tile's button is focused. */
   spoken: string;
+  /** Hover help on the tile: where it opens, plus the comparison figure behind the trend line. */
+  tip?: string;
 }
 
 /** Current time, re-read every `everyMs` so the week boundary moves at midnight on Saturday. */
@@ -259,12 +260,11 @@ function StreakBar({ s }: { s: StreakSummary }) {
 
 // ---- models --------------------------------------------------------------------------------
 
-function weekCompare(delta: number, lastWeek: number, fmt: (n: number) => string, unit: string): Compare {
+function weekCompare(delta: number, fmt: (n: number) => string, unit: string): Compare {
   const d = describeDelta(delta, fmt);
   return {
     dir: d.dir,
     text: d.dir === "flat" ? "Same as last week" : `${d.text}${unit} vs last week`,
-    title: `Same days last week: ${fmt(lastWeek)}${unit}`,
   };
 }
 
@@ -277,13 +277,13 @@ function buildTiles(data: Snapshot, now: Date): TileModel[] {
   // Hours worked this week, from Claude Code sessions.
   const minutes = sumByDay((work.sessionTime ?? []).map((s) => s.minutesByDay));
   const hoursWeek = compareWeeks(minutes, now);
-  const hoursCmp = weekCompare(hoursWeek.delta / 60, hoursWeek.lastWeek / 60, formatHours, "h");
+  const hoursCmp = weekCompare(hoursWeek.delta / 60, formatHours, "h");
   const hours = hoursWeek.thisWeek / 60;
 
   // Commits this week, across repos.
   const commitsByDay = sumByDay((work.repoActivity ?? []).map((r) => r.commitsByDay));
   const commitsWeek = compareWeeks(commitsByDay, now);
-  const commitsCmp = weekCompare(commitsWeek.delta, commitsWeek.lastWeek, formatCount, "");
+  const commitsCmp = weekCompare(commitsWeek.delta, formatCount, "");
 
   const jira = jiraSummary(work.jira ?? [], now);
   const prs = prQueue(work.prs ?? [], now);
@@ -316,6 +316,7 @@ function buildTiles(data: Snapshot, now: Date): TileModel[] {
         />
       ),
       spoken: `${formatHours(hours)} hours in Claude Code sessions since Sunday, ${DIR_WORD[hoursCmp.dir ?? "flat"]} on the same days last week (${formatHours(hoursWeek.lastWeek / 60)} hours).`,
+      tip: `Opens Work on the Time tab; the same days last week came to ${formatHours(hoursWeek.lastWeek / 60)}h.`,
     }),
     tile("jira", "work", "jira", {
       label: "Open Jira issues",
@@ -367,18 +368,20 @@ function buildTiles(data: Snapshot, now: Date): TileModel[] {
       compare: commitsCmp,
       visual: <TrendSpark values={seriesFor(commitsByDay, keys, 0)} label="Commits per day, last 14 days" from={weekFrom} />,
       spoken: `${plural(commitsWeek.thisWeek, "commit")} since Sunday, ${DIR_WORD[commitsCmp.dir ?? "flat"]} on the same days last week (${formatCount(commitsWeek.lastWeek)}).`,
+      tip: `Opens Work on the Time tab; the same days last week had ${plural(commitsWeek.lastWeek, "commit")}.`,
     }),
     tile("streak", "learning", "learning", {
       label: "Learning streak",
       value: streak.current,
       format: formatCount,
       unit: streak.current === 1 ? "day" : "days",
-      compare: {
-        text: streakText,
-        title: streak.current > 0 ? "Daily.md has no last-studied date, so this can't show whether the streak is still alive." : undefined,
-      },
+      compare: { text: streakText },
       visual: <StreakBar s={streak} />,
       spoken: `Learning streak ${plural(streak.current, "day")}, best ${plural(streak.best, "day")}. ${streakText}.`,
+      tip:
+        streak.current > 0
+          ? "Opens Learning details; Daily.md has no last-studied date, so a lapse can't show here."
+          : undefined,
     }),
     tile("sleep", "personal", "checkins", {
       label: "Avg sleep, 7 days",
@@ -391,7 +394,6 @@ function buildTiles(data: Snapshot, now: Date): TileModel[] {
           ? {
               dir: sleepDelta.dir,
               text: sleepDelta.dir === "flat" ? "Same as last week" : `${sleepDelta.text}h vs last week`,
-              title: `Previous 7 days: ${formatHours(sleep.previous ?? 0)}h over ${plural(sleep.previousDays, "night")}`,
             }
           : sleep.current !== null
             ? { text: `${plural(sleep.currentDays, "night")} logged` }
@@ -410,6 +412,10 @@ function buildTiles(data: Snapshot, now: Date): TileModel[] {
           : `Average sleep ${formatHours(sleep.current)} hours over ${plural(sleep.currentDays, "night")}${
               sleep.previous !== null ? `, previous 7 days ${formatHours(sleep.previous)} hours` : ""
             }.`,
+      tip:
+        sleep.previous !== null
+          ? `Opens Personal details; the 7 days before averaged ${formatHours(sleep.previous)}h over ${plural(sleep.previousDays, "night")}.`
+          : undefined,
     }),
   ];
 }
@@ -446,13 +452,19 @@ function Tile({ model, index }: { model: TileModel; index: number }) {
       >
         <div className={styles.head}>
           <h3 className={styles.label}>
-            <button type="button" className={styles.hit} onClick={trigger.open} aria-describedby={descId}>
+            <button
+              type="button"
+              className={styles.hit}
+              onClick={trigger.open}
+              aria-describedby={descId}
+              data-tip={(avail.kind === "ok" ? model.tip : undefined) ?? detailTip(model.area, model.key)}
+            >
               {model.label}
               <span className="sr-only">, open {detailTitle(model.area)} details</span>
             </button>
           </h3>
           {caveat ? (
-            <span className={styles.caveat} title={caveat}>
+            <span className={styles.caveat} data-tip={caveat}>
               <StatusDot tone="warn" size={9} glow={false} />
             </span>
           ) : null}
@@ -470,7 +482,7 @@ function Tile({ model, index }: { model: TileModel; index: number }) {
               <p className={styles.noValue}>{model.noValue ?? "No data yet"}</p>
             )}
             {model.compare ? (
-              <p className={styles.compare} title={model.compare.title}>
+              <p className={styles.compare}>
                 {model.compare.dir ? <ArrowGlyph dir={model.compare.dir} /> : null}
                 <span>{model.compare.text}</span>
               </p>
@@ -483,7 +495,7 @@ function Tile({ model, index }: { model: TileModel; index: number }) {
               <StatusDot tone={PROBLEM[avail.kind].tone} size={9} glow={false} />
               <span>{PROBLEM[avail.kind].title}</span>
             </p>
-            <p className={styles.problemText} title={avail.message}>
+            <p className={styles.problemText}>
               {avail.message}
             </p>
           </div>

@@ -6,12 +6,14 @@ import {
   areaRadius,
   buildLifeGraph,
   createSimulation,
+  FIT_EXTENT,
   fitTransform,
   haloFor,
   lastActiveText,
   lastDays,
   MAX_PROJECTS,
   mergeProjects,
+  orientationFor,
   placeLabels,
   projectKey,
   projectRadius,
@@ -23,6 +25,8 @@ import {
   simNodes,
   SIZE,
   truncateLabel,
+  type LifeGraph,
+  type Orientation,
   type ProjectStat,
 } from "./lifeGraph";
 
@@ -532,6 +536,65 @@ describe("layout", () => {
     runToEnd(a);
     runToEnd(b);
     expect(a.nodes().map((n) => [n.x, n.y])).toEqual(b.nodes().map((n) => [n.x, n.y]));
+  });
+
+  it("picks the wide layout only on an ultrawide screen with a stage at least twice as wide as tall", () => {
+    expect(orientationFor(600, 800)).toBe("portrait");
+    expect(orientationFor(1400, 600)).toBe("landscape");
+    expect(orientationFor(2200, 730)).toBe("landscape"); // under 1920px nothing changes
+    expect(orientationFor(2200, 730, true)).toBe("wide");
+    expect(orientationFor(1500, 800, true)).toBe("landscape"); // ultrawide window, squarer stage
+    expect(orientationFor(600, 800, true)).toBe("portrait");
+  });
+
+  const settled = (orientation: Orientation, g: LifeGraph = graph) => {
+    const seeds = seedLayout(g, orientation);
+    const nodes = simNodes(g, seeds);
+    const sim = createSimulation(nodes, simLinks(g, seeds));
+    const ticks = runToEnd(sim);
+    const xs = nodes.map((n) => n.x ?? 0);
+    const ys = nodes.map((n) => n.y ?? 0);
+    const box = { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    return { nodes, ticks, box };
+  };
+
+  it("spreads the wide layout sideways, so the map uses a 21:9 stage", () => {
+    const land = settled("landscape");
+    const wide = settled("wide");
+    expect(wide.box.w / wide.box.h).toBeGreaterThan(land.box.w / land.box.h);
+    expect(wide.ticks).toBeLessThanOrEqual(SETTLE_TICKS + 2);
+    for (const n of wide.nodes) {
+      expect(Number.isFinite(n.x)).toBe(true);
+      expect(Number.isFinite(n.y)).toBe(true);
+    }
+  });
+
+  it("keeps nodes apart in the wide layout with one project and with sixteen", () => {
+    for (const count of [1, 16]) {
+      const g = buildLifeGraph(
+        snapshot({
+          work: { sessionTime: Array.from({ length: count }, (_, i) => ({ project: `p-${i}`, minutesByDay: { [day(0)]: 200 - i } })) },
+        }),
+        now,
+      );
+      const { nodes } = settled("wide", g);
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i];
+          const b = nodes[j];
+          const gap = Math.hypot((a.x ?? 0) - (b.x ?? 0), (a.y ?? 0) - (b.y ?? 0)) - a.r - b.r;
+          expect(gap).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("lets the wide layout frame closer than the others", () => {
+    const none = { top: 0, right: 0, bottom: 0, left: 0 };
+    const small = [{ x: 0, y: 0, r: 40 }];
+    expect(fitTransform(small, 3000, 1100, none).k).toBe(FIT_EXTENT.landscape[1]);
+    expect(fitTransform(small, 3000, 1100, none, FIT_EXTENT.wide).k).toBe(FIT_EXTENT.wide[1]);
+    expect(FIT_EXTENT.wide[1]).toBeGreaterThan(FIT_EXTENT.landscape[1]);
   });
 
   it("frames every node inside the padded box", () => {

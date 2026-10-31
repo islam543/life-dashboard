@@ -24,6 +24,11 @@
   flex: 1;
 }
 
+/* Needs you and Next moves: a column of their own only on ultrawide screens (see the end). */
+.act {
+  display: contents;
+}
+
 @keyframes cell-in {
   from {
     opacity: 0;
@@ -88,5 +93,56 @@
       "moves moves moves moves moves bars  bars  bars  bars  bars  bars  bars"
       "week  week  week  week  week  week  week  week  week  week  week  week"
       "heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat";
+  }
+}
+
+/* Ultrawide (21:9, about 2560 x 940 of viewport): the whole of Home fits the screen, no page scroll.
+   Three columns read left to right by urgency:
+     left 30%    act now: Needs you above Next moves, each scrolling inside itself
+     centre 47%  the numbers: key numbers, this week, the last 52 weeks
+     right 23%   where the time went: project bars (8 projects plus Other at most, so it never scrolls)
+   Ratios: the bars never need more than about 540px of width, while Next moves titles and reasons
+   wrap less with every extra pixel, so the right column gives 2% to the left. The centre stays at 47%:
+   any wider and the year grid's cells grow taller and This week would have to scroll at 940px high.
+   The centre row for This week is the one that gives way when the height runs short: its body
+   scrolls, down to a floor (4 x 48px) that keeps the seven day columns in view, small enough that the
+   offline banner still fits without a page scroll. The key numbers and the year grid always show in
+   full. AppShell gives Home the screen height. On a 1920px-wide screen the
+   key numbers wrap to two rows, so the rows can outgrow the screen; then the page scrolls a little
+   rather than hiding This week, and all three columns still end on the same line. */
+@media (min-width: 1920px) {
+  .grid {
+    height: 100%;
+    grid-template-columns: minmax(0, 30fr) minmax(0, 47fr) minmax(0, 23fr);
+    grid-template-rows: auto minmax(calc(var(--space-12) * 4), auto) 1fr;
+    grid-template-areas:
+      "act kpis bars"
+      "act week bars"
+      "act heat bars";
+  }
+
+  .act {
+    grid-area: act;
+    display: flex;
+    flex-direction: column;
+    gap: var(--grid-gap);
+    min-height: 0;
+  }
+
+  /* Needs you takes what it needs, up to a little over half; Next moves gets the rest. */
+  .needs {
+    flex: 0 1 auto;
+    max-height: 55%;
+    min-height: 0;
+  }
+
+  .moves {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .week,
+  .bars {
+    min-height: 0;
   }
 }

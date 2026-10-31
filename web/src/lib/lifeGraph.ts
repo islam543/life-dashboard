@@ -986,7 +986,23 @@ export function truncateLabel(text: string, max: number): string {
 // ---------------------------------------------------------------------------------------------
 // Layout: seeds and the force simulation
 
-export type Orientation = "landscape" | "portrait";
+/** "wide" is the 21:9 layout: only on ultrawide screens (1920px and up) with a stage at least twice as wide as tall. */
+export type Orientation = "landscape" | "portrait" | "wide";
+
+/** Stage width over height from which an ultrawide screen switches to the "wide" layout. */
+export const WIDE_ASPECT = 2;
+
+/**
+ * Which layout fits a stage of this size. Below 0.9 the map stacks vertically; on an ultrawide screen a
+ * stage of WIDE_ASPECT or more spreads the areas further apart sideways. `ultrawide` is the viewport test,
+ * so screens under 1920px keep the landscape layout whatever their stage shape.
+ */
+export function orientationFor(width: number, height: number, ultrawide = false): Orientation {
+  const aspect = width / Math.max(1, height);
+  if (aspect < 0.9) return "portrait";
+  if (ultrawide && aspect >= WIDE_ASPECT) return "wide";
+  return "landscape";
+}
 
 export interface SimNode extends SimulationNodeDatum {
   id: string;
@@ -1010,6 +1026,7 @@ const DEG = Math.PI / 180;
 const AREA_ANGLE: Record<Orientation, Record<Area, number>> = {
   landscape: { work: 180, learning: -62, personal: -18, calendar: 26, email: 70 },
   portrait: { work: -90, learning: 150, personal: 115, calendar: 65, email: 30 },
+  wide: { work: 180, learning: -42, personal: -14, calendar: 14, email: 42 },
 };
 
 const AREA_DISTANCE = 190;
@@ -1018,6 +1035,7 @@ const AREA_DISTANCE = 190;
 const STRETCH: Record<Orientation, { x: number; y: number }> = {
   landscape: { x: 1.45, y: 1 },
   portrait: { x: 1, y: 1.3 },
+  wide: { x: 2.3, y: 1.25 },
 };
 
 /** Where each node wants to sit. Deterministic, so the map looks the same on every visit. */
@@ -1184,7 +1202,12 @@ export interface Pad {
 
 /** Zoom limits for wheel and buttons, and the narrower range the automatic framing may pick. */
 export const ZOOM_EXTENT: [number, number] = [0.25, 3];
-const FIT_EXTENT: [number, number] = [0.3, 1.25];
+/** The wide layout may frame closer, so a small map still fills a 3440px stage instead of floating in it. */
+export const FIT_EXTENT: Record<Orientation, [number, number]> = {
+  landscape: [0.3, 1.25],
+  portrait: [0.3, 1.25],
+  wide: [0.3, 1.6],
+};
 
 /** Node radius on screen grows with the square root of the zoom, so zooming out keeps nodes visible. */
 export function nodeScale(k: number): number {
@@ -1197,6 +1220,7 @@ export function fitTransform(
   width: number,
   height: number,
   pad: Pad,
+  extent: readonly [number, number] = FIT_EXTENT.landscape,
 ): View {
   let x0 = Infinity;
   let y0 = Infinity;
@@ -1213,7 +1237,7 @@ export function fitTransform(
   if (!Number.isFinite(x0)) return { k: 1, x: width / 2, y: height / 2 };
   const availW = Math.max(1, width - pad.left - pad.right);
   const availH = Math.max(1, height - pad.top - pad.bottom);
-  const k = clamp(Math.min(availW / Math.max(1, x1 - x0), availH / Math.max(1, y1 - y0)), FIT_EXTENT[0], FIT_EXTENT[1]);
+  const k = clamp(Math.min(availW / Math.max(1, x1 - x0), availH / Math.max(1, y1 - y0)), extent[0], extent[1]);
   const cx = (x0 + x1) / 2;
   const cy = (y0 + y1) / 2;
   return { k, x: pad.left + availW / 2 - k * cx, y: pad.top + availH / 2 - k * cy };

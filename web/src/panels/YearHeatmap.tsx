@@ -39,10 +39,10 @@ import styles from "./YearHeatmap.module.css";
 type Metric = "work" | "commits" | "sleep" | "workouts";
 
 const METRICS: readonly SegmentedOption<Metric>[] = [
-  { value: "work", label: "Work" },
-  { value: "commits", label: "Commits" },
-  { value: "sleep", label: "Sleep" },
-  { value: "workouts", label: "Workouts" },
+  { value: "work", label: "Work", tip: "Colours each day by time in Claude Code sessions." },
+  { value: "commits", label: "Commits", tip: "Colours each day by commits across your repos." },
+  { value: "sleep", label: "Sleep", tip: "Colours each night by hours slept, from your evening check-ins." },
+  { value: "workouts", label: "Workouts", tip: "Colours each day by workout minutes, from your evening check-ins." },
 ];
 const METRIC_VALUES = METRICS.map((m) => m.value);
 
@@ -430,7 +430,7 @@ function Heatmap({ grid, def, metric, note }: { grid: HeatGrid; def: MetricDef; 
               <span aria-hidden="true">Less</span>
               <span className={styles.scale}>
                 {[1, 2, 3, 4].map((b, k) => (
-                  <span key={b} className={`${styles.swatch} ${styles[`swatch${b}`]}`} title={ranges[k] || undefined} aria-hidden="true" />
+                  <span key={b} className={`${styles.swatch} ${styles[`swatch${b}`]}`} data-tip={ranges[k] || undefined} aria-hidden="true" />
                 ))}
               </span>
               <span aria-hidden="true">More</span>

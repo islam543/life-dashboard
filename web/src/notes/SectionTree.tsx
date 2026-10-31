@@ -73,6 +73,7 @@ function NameForm({
   level,
   siblings,
   submitLabel,
+  submitTip,
   onSubmit,
   onCancel,
 }: {
@@ -81,6 +82,8 @@ function NameForm({
   level: number;
   siblings: string[];
   submitLabel: string;
+  /** Hover help on the check button. */
+  submitTip: string;
   onSubmit: (name: string) => Promise<string | null>;
   onCancel: () => void;
 }) {
@@ -152,7 +155,7 @@ function NameForm({
             else void submit();
           }}
         />
-        <button type="submit" className={styles.formSubmit} disabled={busy} aria-label={submitLabel}>
+        <button type="submit" className={styles.formSubmit} disabled={busy} aria-label={submitLabel} data-tip={submitTip}>
           <CheckIcon />
         </button>
       </form>
@@ -304,6 +307,7 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
           level={row.level}
           siblings={siblingNames(sections, parentPath(row.path), row.path)}
           submitLabel="Save name"
+          submitTip="Renames the folder on disk, and the notes inside move with it; Esc cancels."
           onCancel={() => stopEditing(row.path)}
           onSubmit={async (name) => {
             const failed = await onRename(row.path, name);
@@ -336,6 +340,13 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
         className={styles.item}
         style={{ "--level": row.level } as CSSProperties}
         data-all={isAll ? "" : undefined}
+        data-tip={
+          isAll
+            ? "Lists every note from every section, newest first."
+            : row.hasChildren
+              ? "Lists this section's notes, subsections included, newest first; F2 renames it."
+              : "Lists this section's notes, newest first; F2 renames it."
+        }
         onClick={() => {
           setFocusPath(row.path);
           onSelect(row.path);
@@ -346,6 +357,13 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
           className={styles.twisty}
           data-open={row.expanded ? "" : undefined}
           aria-hidden="true"
+          data-tip={
+            row.hasChildren
+              ? row.expanded
+                ? "Hides the subsections; the Left arrow key does the same."
+                : "Shows the subsections; the Right arrow key does the same."
+              : undefined
+          }
           onClick={(e) => {
             if (!row.hasChildren) return;
             e.stopPropagation();
@@ -378,6 +396,7 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
           level={sectionDepth(parent) + 1}
           siblings={siblingNames(sections, parent)}
           submitLabel="Create section"
+          submitTip="Creates the folder in your notes folder, where Obsidian sees it too; Esc cancels."
           onCancel={() => stopEditing(parent)}
           onSubmit={async (name) => {
             const failed = await onCreate(parent, name);
@@ -410,12 +429,25 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
           aria-disabled={tooDeep || undefined}
           aria-describedby={tooDeep ? reasonId : undefined}
           className={tooDeep ? styles.inactive : undefined}
+          tip={
+            tooDeep
+              ? `Does nothing here because sections nest ${MAX_SECTION_DEPTH} levels deep at most.`
+              : selected === ALL_NOTES
+                ? "Adds a top-level folder to your notes folder; type its name, then press Enter."
+                : "Adds a folder inside this section; type its name, then press Enter."
+          }
         >
           {newLabel}
         </Button>
         {selectedSection ? (
           <>
-            <Button size="sm" variant="ghost" icon={<PencilIcon />} onClick={() => startRename(selected)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<PencilIcon />}
+              onClick={() => startRename(selected)}
+              tip="Renames this section's folder on disk, and its notes move with it; F2 does the same."
+            >
               Rename
             </Button>
             <Button
@@ -428,6 +460,11 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
               aria-disabled={blocked ? true : undefined}
               aria-describedby={blocked ? reasonId : undefined}
               className={blocked ? styles.inactive : styles.danger}
+              tip={
+                blocked
+                  ? "Does nothing because only empty sections can be deleted; empty this one first."
+                  : "Removes this empty section's folder right away; no notes are affected."
+              }
             >
               Delete
             </Button>
@@ -467,6 +504,7 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
               () => undefined,
             );
           }}
+          tip="Copies the notes folder path, so you can open it in File Explorer or Obsidian."
         >
           {copied ? "Copied" : "Copy path"}
         </Button>

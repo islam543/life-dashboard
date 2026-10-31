@@ -447,6 +447,11 @@ export function Notes({ path }: NotesProps) {
       aria-disabled={newSection ? undefined : true}
       aria-describedby={newSection ? undefined : "notes-new-reason"}
       className={newSection ? undefined : styles.inactive}
+      tip={
+        newSection
+          ? "Opens a form to name the note and pick its section and template; it saves as markdown."
+          : "Does nothing yet because notes live in sections; add one with New section first."
+      }
     >
       New note
     </Button>
@@ -517,6 +522,7 @@ export function Notes({ path }: NotesProps) {
                   setPhonePane("sections");
                   pendingFocus.current = () => treeRef.current?.focusSelected();
                 }}
+                data-tip="Shows the section tree, so you can open another section's notes."
               >
                 <BackIcon />
                 Sections
@@ -539,7 +545,12 @@ export function Notes({ path }: NotesProps) {
         <div className={styles.editorPane}>
           {isPhone && path ? (
             <div className={styles.phoneBar}>
-              <a ref={notesBackRef} href={noteHash(null)} className={styles.back}>
+              <a
+                ref={notesBackRef}
+                href={noteHash(null)}
+                className={styles.back}
+                data-tip="Returns to the notes list; the open note saves first."
+              >
                 <BackIcon />
                 <span dir="auto">{sectionLabel(current)}</span>
               </a>
@@ -564,7 +575,9 @@ export function Notes({ path }: NotesProps) {
                 body={
                   notes.length
                     ? "Pick one from the list, or start a new note. Notes save as you type, as markdown files Obsidian can open."
-                    : "Start a new note with New note. It saves as you type, as a markdown file Obsidian can open."
+                    : sections.length
+                      ? "Start a new note with New note. It saves as you type, as a markdown file Obsidian can open."
+                      : "Add a section with New section first, then start a note with New note. It saves as you type."
                 }
               />
             </Panel>
@@ -586,6 +599,8 @@ export function Notes({ path }: NotesProps) {
         title="Leave without saving?"
         confirmLabel="Leave anyway"
         cancelLabel="Stay on note"
+        confirmTip="Leaves the note; your unsaved text stays in this browser and is offered back later."
+        cancelTip="Keeps you on the note, so you can retry the save or copy your text."
         onCancel={() => setLeave(null)}
         onConfirm={() => {
           const href = leave?.href;

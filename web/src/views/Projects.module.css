@@ -21,3 +21,27 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Ultrawide (21:9): the board and a project's page fill the window below the header and scroll
+   inside their columns, so the page itself does not scroll. --fit-top and --fit-bottom come from
+   useFitHeight (projects/fit.ts); the floor keeps a very short window usable, scrolling the page. */
+@media (min-width: 1920px) {
+  .view {
+    --fit-height: max(
+      calc(100dvh - var(--fit-top, 0px) - var(--fit-bottom, 0px)),
+      calc(var(--space-12) * 10)
+    );
+  }
+
+  .board {
+    height: var(--fit-height);
+    align-items: stretch;
+  }
+
+  .boardMain,
+  .tray {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}

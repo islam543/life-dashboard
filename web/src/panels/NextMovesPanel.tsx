@@ -10,6 +10,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { Panel, type PanelState } from "../ui/Panel";
 import { SkeletonRows } from "../ui/Skeleton";
 import { StatusDot } from "../ui/StatusDot";
+import { opensIn } from "./NeedsYouStrip";
 import styles from "./NextMovesPanel.module.css";
 
 // AI next moves, in the violet accent. A ranked route of steps: the first node glows as "Next".
@@ -116,7 +117,14 @@ function Reason({ text }: { text: string }) {
         {text}
       </p>
       {clipped || open ? (
-        <button type="button" className={styles.reasonToggle} aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          className={styles.reasonToggle}
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen((v) => !v)}
+          data-tip={open ? "Shortens the reason back to 4 lines." : "Shows the rest of why Claude ranked this move here."}
+        >
           {open ? "Show less" : "Show full reason"}
         </button>
       ) : null}
@@ -143,7 +151,14 @@ function ActionError({ message, onClose }: { message: string; onClose: () => voi
     <div className={styles.actionError} role="alert">
       <StatusDot tone="danger" size={9} glow={false} />
       <p>{message}</p>
-      <Button variant="ghost" size="sm" icon={<CloseIcon />} onClick={onClose} aria-label="Hide this message" />
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={<CloseIcon />}
+        onClick={onClose}
+        aria-label="Hide this message"
+        tip="Hides this message; the list stays as it is."
+      />
     </div>
   );
 }
@@ -192,9 +207,14 @@ const MoveRow = forwardRef<HTMLLIElement, MoveRowProps>(function MoveRow({ move,
           {first ? <span className={styles.nextTag}>Next</span> : null}
           <span className={styles.area}>{areaLabel(move.area)}</span>
         </div>
-        <h3 className={styles.moveTitle} title={move.title}>
+        <h3 className={styles.moveTitle} title={move.sourceUrl ? undefined : move.title}>
           {move.sourceUrl ? (
-            <a className={styles.moveLink} href={move.sourceUrl} {...(move.sourceUrl?.startsWith("#") ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
+            <a
+              className={styles.moveLink}
+              href={move.sourceUrl}
+              data-tip={`${opensIn(move.sourceUrl)}.`}
+              {...(move.sourceUrl?.startsWith("#") ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+            >
               <span className={styles.clamp}>{move.title}</span>
               {move.sourceUrl?.startsWith("#") ? null : (
                 <>
@@ -219,6 +239,7 @@ const MoveRow = forwardRef<HTMLLIElement, MoveRowProps>(function MoveRow({ move,
           className={styles.done}
           onClick={() => onSet(move, "done")}
           aria-label={`Done: ${move.title}`}
+          tip="Marks this move done and takes it off the list; new runs skip it for 7 days."
         >
           Done
         </Button>
@@ -229,6 +250,7 @@ const MoveRow = forwardRef<HTMLLIElement, MoveRowProps>(function MoveRow({ move,
           className={styles.dismiss}
           onClick={() => onSet(move, "dismissed")}
           aria-label={`Dismiss: ${move.title}`}
+          tip="Hides this move without doing it; new runs skip it for 7 days."
         >
           Dismiss
         </Button>
@@ -326,7 +348,12 @@ export function NextMovesPanel() {
         title="Your ranked next steps appear here."
         body="Claude reads your tickets, pull requests and learning, then picks what to do first and why."
         action={
-          <Button variant="primary" icon={<SparkIcon />} onClick={run}>
+          <Button
+            variant="primary"
+            icon={<SparkIcon />}
+            onClick={run}
+            tip="Asks Claude to rank your next steps from your tickets, pull requests and learning."
+          >
             Generate next moves
           </Button>
         }
@@ -343,7 +370,13 @@ export function NextMovesPanel() {
           Run <code className={styles.code}>claude</code> in a terminal and log in.
         </p>
         <p className={styles.problemHint}>Then try again here.</p>
-        <Button variant="ai" size="sm" icon={<SparkIcon />} onClick={run}>
+        <Button
+          variant="ai"
+          size="sm"
+          icon={<SparkIcon />}
+          onClick={run}
+          tip="Runs Claude again; log in first by running claude in a terminal."
+        >
           Try again
         </Button>
       </div>
@@ -399,6 +432,11 @@ export function NextMovesPanel() {
       loading={running}
       loadingLabel="Running"
       onClick={run}
+      tip={
+        running
+          ? "Claude is ranking your moves now; the list updates when it finishes."
+          : "Asks Claude for a new ranked list from your latest data; if it fails, these stay."
+      }
     >
       Re-run
     </Button>
@@ -409,11 +447,13 @@ export function NextMovesPanel() {
       <Panel
         title="Next moves"
         tone="ai"
+        fit
         state={state}
         message={message}
         hint={hint}
         onRetry={onRetry}
         retrying={running}
+        retryTip={file ? "Runs Claude again to rank your next moves." : "Loads the saved next moves from the local server again."}
         notice={notice}
         skeleton="rows"
         meta={meta}

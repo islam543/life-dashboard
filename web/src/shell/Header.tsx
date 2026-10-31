@@ -15,6 +15,8 @@ import {
   type SourceKey,
 } from "../lib/format";
 import { noteHash, projectHash, toHash, type View } from "../lib/route";
+import { setTipsEnabled, useTipsEnabled } from "../lib/tips";
+import { ThemeSwitch } from "./ThemeSwitch";
 import { Button } from "../ui/Button";
 import { StatusDot, toneForSource } from "../ui/StatusDot";
 import styles from "./Header.module.css";
@@ -23,11 +25,11 @@ import styles from "./Header.module.css";
 export type Route = View;
 
 /** The view switch. Each tab links to its view's top level, so it also closes an open project or note. */
-const VIEWS: readonly { key: View; href: string; label: string }[] = [
-  { key: "home", href: toHash({ view: "home" }), label: "Home" },
-  { key: "projects", href: projectHash(), label: "Projects" },
-  { key: "notes", href: noteHash(), label: "Notes" },
-  { key: "map", href: toHash({ view: "map" }), label: "Life map" },
+const VIEWS: readonly { key: View; href: string; label: string; tip: string }[] = [
+  { key: "home", href: toHash({ view: "home" }), label: "Home", tip: "Shows the morning glance: what needs you, next moves and the key numbers." },
+  { key: "projects", href: projectHash(), label: "Projects", tip: "Shows your tracked projects with their tasks, notes and time spent." },
+  { key: "notes", href: noteHash(), label: "Notes", tip: "Opens your vault notes to browse, read and edit; edits save as you type." },
+  { key: "map", href: toHash({ view: "map" }), label: "Life map", tip: "Shows the five life areas as one map, sized by attention in the last 7 days." },
 ];
 
 const USER_NAME = "Islam";
@@ -195,6 +197,39 @@ function SourceStatusBar({ sources, now }: { sources: Snapshot["sources"] | null
   );
 }
 
+function HelpIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M6.3 6.3a1.8 1.8 0 1 1 2.5 1.6c-.5.2-.8.6-.8 1.1v.3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <circle cx="8" cy="11.3" r="0.8" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Turns hover help (ui/TipLayer) on or off for this browser. */
+function TipsSwitch() {
+  const on = useTipsEnabled();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      icon={<HelpIcon />}
+      aria-pressed={on}
+      onClick={() => setTipsEnabled(!on)}
+      tip={on ? "Turns off these explanations when you hover over controls." : undefined}
+    >
+      {on ? "Hover help on" : "Hover help off"}
+    </Button>
+  );
+}
+
 export function Header({ route }: { route: Route }) {
   const snap = useSnapshot();
   const { openCheckin } = useCheckin();
@@ -226,18 +261,25 @@ export function Header({ route }: { route: Route }) {
               "Loading"
             ) : null}
           </p>
+          <TipsSwitch />
+          <ThemeSwitch />
           <Button
             icon={<RefreshIcon />}
             loading={snap.collecting}
             loadingLabel="Refreshing"
             onClick={() => void snap.collect()}
-            title="Run every collector now"
+            tip="Re-reads all 7 sources now, from GitHub to Calendar; panels update when it finishes."
           >
             Refresh
           </Button>
           <Button
             icon={checkedIn ? <CheckIcon /> : <PlusIcon />}
             onClick={() => openCheckin()}
+            tip={
+              checkedIn
+                ? "Opens today's saved check-in to change it; saving again replaces it."
+                : "Logs today's sleep, energy, mood, workout and spend in about 30 seconds."
+            }
           >
             {checkedIn ? "Edit check-in" : "Check in"}
           </Button>
@@ -246,8 +288,8 @@ export function Header({ route }: { route: Route }) {
 
       <div className={styles.bar}>
         <nav className={styles.views} aria-label="View">
-          {VIEWS.map(({ key, href, label }) => (
-            <a key={key} href={href} className={styles.view} aria-current={route === key ? "page" : undefined}>
+          {VIEWS.map(({ key, href, label, tip }) => (
+            <a key={key} href={href} className={styles.view} aria-current={route === key ? "page" : undefined} data-tip={tip}>
               {route === key ? (
                 <motion.span
                   layoutId="view-switch-pill"

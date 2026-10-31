@@ -78,6 +78,14 @@
 
 /* ---------- Status groups ---------- */
 
+/* Holds the status groups (or the empty filter message). Same spacing as .body, so below 1920px it
+   reads as if the groups sat in .body directly; on ultrawide it lays them out as lanes. */
+.lanes {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
 .group {
   display: grid;
   gap: var(--space-3);
@@ -408,5 +416,116 @@
 
   .value {
     font-size: var(--fs-xl);
+  }
+}
+
+/* ---------- Ultrawide (21:9) ----------
+   The board fills the height Projects.module.css gives it. Readout and area filter share the top
+   row; below them the status groups are lanes side by side (Active, Paused, Ideas, Done), each
+   scrolling inside itself. Active gets twice the width of the other lanes with cards; empty and
+   folded lanes stay narrow so the width goes to cards. */
+@media (min-width: 1920px) {
+  .panel {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .panelBody {
+    min-height: 0;
+  }
+
+  .body {
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-4) var(--grid-gap);
+    min-height: 0;
+  }
+
+  .readout {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  /* The note sits beside the number: one line less of height. */
+  .cell {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-3);
+  }
+
+  .cell dt {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar {
+    grid-column: 2;
+    grid-row: 1;
+    flex-wrap: nowrap;
+    align-self: center;
+  }
+
+  .lanes {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .lanes > section {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: var(--space-3);
+    min-width: 0;
+    min-height: 0;
+    padding: 0 var(--grid-gap);
+    border-top: 0;
+    border-left: var(--hairline) solid var(--divider);
+  }
+
+  .lanes > section:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .lanes > section:last-child {
+    padding-right: 0;
+  }
+
+  .lanes > .group[data-status="active"] {
+    flex-grow: 2;
+  }
+
+  .lanes > .groupEmpty,
+  .lanes > .group[data-empty],
+  .lanes > .group[data-folded] {
+    flex: 0 0 24ch;
+  }
+
+  .groupTitle {
+    flex: none;
+    min-height: var(--target-min);
+  }
+
+  /* The lane's scroll box. The padding (taken back by the margin) leaves room for the focus ring and
+     the arrival pulse, which overflow would otherwise clip. */
+  .cards {
+    position: relative; /* exiting cards (popLayout) and screen-reader text are placed against the lane */
+    flex: 1;
+    align-content: start;
+    min-height: 0;
+    margin: calc(-1 * var(--space-1-5));
+    padding: var(--space-1-5);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .cards[hidden] {
+    display: none;
   }
 }

@@ -17,6 +17,8 @@ interface CommonProps {
   size?: ButtonSize;
   /** Icon before the label (16px inline SVG, aria-hidden). */
   icon?: ReactNode;
+  /** Hover help: one short sentence on what the button does (shown by ui/TipLayer). */
+  tip?: string;
 }
 
 export interface ButtonProps extends CommonProps, ButtonHTMLAttributes<HTMLButtonElement> {
@@ -52,6 +54,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     type = "button",
     disabled,
     onClick,
+    tip,
     ...rest
   },
   ref,
@@ -66,6 +69,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={loading || undefined}
       aria-disabled={loading || undefined}
       data-loading={loading || undefined}
+      data-tip={tip}
       onClick={(e) => {
         if (loading) {
           e.preventDefault();
@@ -96,12 +100,14 @@ export function ButtonLink({
   children,
   href,
   external = /^https?:\/\//.test(href),
+  tip,
   ...rest
 }: ButtonLinkProps) {
   return (
     <a
       href={href}
       className={classes(variant, size, className, !children && !!icon)}
+      data-tip={tip}
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       {...rest}
     >

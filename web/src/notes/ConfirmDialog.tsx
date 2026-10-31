@@ -16,6 +16,10 @@ export interface ConfirmDialogProps {
   /** Label while onConfirm runs, e.g. "Moving to trash". */
   confirmingLabel?: string;
   cancelLabel: string;
+  /** Hover help on the confirm button: what happens and where things go. */
+  confirmTip?: string;
+  /** Hover help on the cancel button. */
+  cancelTip?: string;
   /** "danger" for deletes. */
   tone?: "danger" | "default";
   /** Which button has focus when the dialog opens. Default "cancel". */
@@ -31,6 +35,8 @@ export function ConfirmDialog({
   confirmLabel,
   confirmingLabel,
   cancelLabel,
+  confirmTip,
+  cancelTip,
   tone = "default",
   initialFocus = "cancel",
   onConfirm,
@@ -94,7 +100,7 @@ export function ConfirmDialog({
           </p>
         ) : null}
         <div className={styles.actions}>
-          <Button ref={cancelRef} variant="secondary" onClick={onCancel} disabled={busy}>
+          <Button ref={cancelRef} variant="secondary" onClick={onCancel} disabled={busy} tip={cancelTip}>
             {cancelLabel}
           </Button>
           <Button
@@ -104,6 +110,7 @@ export function ConfirmDialog({
             onClick={() => void confirm()}
             loading={busy}
             loadingLabel={confirmingLabel}
+            tip={confirmTip}
           >
             {confirmLabel}
           </Button>

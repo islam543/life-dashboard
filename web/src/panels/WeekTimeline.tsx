@@ -187,7 +187,12 @@ function Lane({
       ))}
       {more > 0 ? (
         <li>
-          <button type="button" className={styles.more} onClick={onMore}>
+          <button
+            type="button"
+            className={styles.more}
+            onClick={onMore}
+            data-tip="Opens Work details on the Time tab; every open issue is on its Jira tab."
+          >
             +{more} more<span className="sr-only"> on {label}, open details</span>
           </button>
         </li>
@@ -560,7 +565,14 @@ export function WeekTimeline() {
   const { problems, ...status } = weekStatus(snap, data, anyItems || anyMinutes);
 
   return (
-    <Panel title={TITLE} {...status} skeleton="chart" detail={DETAIL} meta={status.state === "ok" ? weekRangeLabel(now) : undefined}>
+    <Panel
+      title={TITLE}
+      {...status}
+      fit
+      skeleton="chart"
+      detail={DETAIL}
+      meta={status.state === "ok" ? weekRangeLabel(now) : undefined}
+    >
       {placement ? (
         <WeekChart
           minutes={minutes}

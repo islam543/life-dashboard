@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from "react";
 import { MOTION, useReducedMotion } from "../hooks/useReducedMotion";
+import { ULTRAWIDE_QUERY, useMediaQuery } from "../notes/useMediaQuery";
 import { useSnapshot } from "../hooks/useSnapshot";
 import { areaLabel, dayKey, formatMinutes, plural } from "../lib/format";
 import { projectHash } from "../lib/route";
@@ -89,6 +90,8 @@ export function useStoredChoice<T extends string>(key: string, allowed: readonly
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /** Hover help for this option: what the panel shows once it is picked. */
+  tip?: string;
 }
 
 /**
@@ -149,6 +152,7 @@ export function Segmented<T extends string>({
           className={styles.segment}
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
+          data-tip={o.tip}
         >
           {o.label}
         </button>
@@ -210,8 +214,8 @@ export function ChartTooltip({ tip, hostWidth }: { tip: TipData | null; hostWidt
 // ---------------------------------------------------------------------------------------------
 
 const RANGES: readonly SegmentedOption<TimeRange>[] = [
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
+  { value: "week", label: "Week", tip: "Shows Claude Code time since Sunday; the pick is kept in this browser." },
+  { value: "month", label: "Month", tip: "Shows Claude Code time since the 1st; the pick is kept in this browser." },
 ];
 const RANGE_VALUES = RANGES.map((r) => r.value);
 
@@ -388,11 +392,11 @@ function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number
               {row.isOther ? "+" : String(i + 1).padStart(2, "0")}
             </span>
             {row.projectId ? (
-              <a className={[styles.label, linkStyles.link].join(" ")} href={projectHash(row.projectId)} title={row.label}>
+              <a className={[styles.label, linkStyles.link].join(" ")} href={projectHash(row.projectId)}>
                 {row.label}
               </a>
             ) : (
-              <span className={styles.label} title={row.isOther ? listNames(row.members, 12) : row.label}>
+              <span className={styles.label}>
                 {row.isOther ? (
                   <>
                     Other <span className={styles.count}>({row.members.length})</span>
@@ -425,20 +429,21 @@ export function ProjectTimeBars() {
   const today = dayKey(now);
   const sessions = snap.data?.work.sessionTime;
 
-  // `today` keeps the totals right across midnight without recomputing on every render.
   const registry = snap.data?.projects;
+  // The ultrawide right column is tall, so it lists twice as many projects before folding into "Other".
+  const barCount = useMediaQuery(ULTRAWIDE_QUERY) ? 16 : 8;
   // `today` keeps the totals right across midnight without recomputing on every render.
   const { rows, total } = useMemo(() => {
     if (!sessions) return { rows: [] as BarRow[], total: 0 };
     if (registryReady(registry)) {
       const { tracked, untracked } = registryTotals(registry, sessions, range, new Date());
       const sum = [...tracked, ...untracked].reduce((s, t) => s + t.minutes, 0);
-      return { rows: registryRows(tracked, untracked), total: sum };
+      return { rows: registryRows(tracked, untracked, barCount), total: sum };
     }
     const totals = projectTotals(sessions, range, new Date());
-    return { rows: topWithOther(totals), total: totals.reduce((s, t) => s + t.minutes, 0) };
+    return { rows: topWithOther(totals, barCount), total: totals.reduce((s, t) => s + t.minutes, 0) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, registry, range, today]);
+  }, [sessions, registry, range, today, barCount]);
   const daysSoFar = range === "week" ? now.getDay() + 1 : now.getDate();
 
   const status = panelFromSource(snap, "claudeSessions", {

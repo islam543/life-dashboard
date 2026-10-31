@@ -10,17 +10,23 @@ import styles from "./Home.module.css";
 // Glance mode. Reading order = importance: what needs me, what to do next, the key numbers,
 // then where the week and the year went. Grid areas live in Home.module.css; each panel fills its
 // cell (height 100%), so panels must not set their own outer width or margin.
+//
+// `act` holds Needs you and Next moves. Below 1920px it is display: contents, so both stay plain grid
+// cells and nothing changes. On ultrawide screens it is the left column: one stack whose two panels
+// share the screen height and scroll inside themselves. The DOM order is the same at every size.
 
 const order = (i: number) => ({ "--i": i }) as CSSProperties;
 
 export function Home() {
   return (
     <div className={styles.grid}>
-      <div className={`${styles.cell} ${styles.needs}`} style={order(0)}>
-        <NeedsYouStrip />
-      </div>
-      <div className={`${styles.cell} ${styles.moves}`} style={order(1)}>
-        <NextMovesPanel />
+      <div className={styles.act}>
+        <div className={`${styles.cell} ${styles.needs}`} style={order(0)}>
+          <NeedsYouStrip />
+        </div>
+        <div className={`${styles.cell} ${styles.moves}`} style={order(1)}>
+          <NextMovesPanel />
+        </div>
       </div>
       <div className={`${styles.cell} ${styles.kpis}`} style={order(2)}>
         <KpiTiles />

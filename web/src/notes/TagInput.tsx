@@ -43,7 +43,12 @@ export function TagInput({ tags, onChange, onBlur }: TagInputProps) {
       <span id={labelId} className={styles.fieldLabel}>
         Tags
       </span>
-      <div className={styles.tagBox} data-invalid={error ? "" : undefined} onClick={() => inputRef.current?.focus()}>
+      <div
+        className={styles.tagBox}
+        data-invalid={error ? "" : undefined}
+        onClick={() => inputRef.current?.focus()}
+        data-tip={tags.length >= MAX_TAGS ? `Holds the most tags a note can have (${MAX_TAGS}); remove one to add another.` : undefined}
+      >
         <ul className={styles.tagList} aria-label="Tags on this note">
           {tags.map((tag) => (
             <li key={tag} className={styles.tag}>
@@ -52,6 +57,7 @@ export function TagInput({ tags, onChange, onBlur }: TagInputProps) {
                 type="button"
                 className={styles.tagRemove}
                 aria-label={`Remove tag ${tag}`}
+                data-tip="Removes this tag from the note; it saves at once."
                 onClick={(e) => {
                   e.stopPropagation();
                   remove(tag);
@@ -71,6 +77,7 @@ export function TagInput({ tags, onChange, onBlur }: TagInputProps) {
             aria-labelledby={labelId}
             aria-describedby={error ? errorId : hintId}
             aria-invalid={error ? true : undefined}
+            data-tip={`Adds tags to the note: type one, then Enter, comma or space; up to ${MAX_TAGS}, saved at once.`}
             enterKeyHint="done"
             autoComplete="off"
             spellCheck={false}

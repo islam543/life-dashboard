@@ -156,3 +156,12 @@
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
+
+/* Ultrawide: the live preview panel is wider than a comfortable line, so the text column is centred. */
+@media (min-width: 1920px) {
+  .prose,
+  .empty {
+    max-width: 75ch;
+    margin-inline: auto;
+  }
+}

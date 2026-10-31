@@ -95,7 +95,14 @@ function OverlayCard({ area, layoutId, onClose }: { area: Area; layoutId: string
           exit={{ opacity: 0, transition: { duration: MOTION.fast * 0.6 } }}
         >
           <header className={styles.head}>
-            <Button variant="ghost" size="sm" icon={<BackIcon />} onClick={onClose} className={styles.back}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<BackIcon />}
+              onClick={onClose}
+              className={styles.back}
+              tip="Closes these details and returns to where you opened them; Esc does the same."
+            >
               Back
             </Button>
             <h2 id={titleId} ref={headingRef} tabIndex={-1} className={styles.title}>

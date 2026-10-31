@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Project } from "../../../shared/types";
 import { projectHash } from "../lib/route";
 import { Board, boardStatus } from "../projects/Board";
+import { revealInScroller, useFitHeight } from "../projects/fit";
 import { NewProjectDialog } from "../projects/NewProjectDialog";
 import { ProjectDetail } from "../projects/ProjectDetail";
 import { ToastProvider, useToasts } from "../projects/Toasts";
@@ -19,6 +20,9 @@ export interface ProjectsProps {
 // beside the Untracked tray; #/projects/<id> opens one project, growing out of its card. App.tsx
 // keeps this view mounted while only the id changes, so the card-to-detail morph can run and the
 // toasts (with a pending Undo) survive the switch.
+//
+// Ultrawide (>=1920px): the board and the project page fill the window height (useFitHeight) and
+// scroll inside their columns: status lanes beside the tray, and three columns for a project.
 //
 // Data: projectsApi through useProjectsStore (every write answers the fresh ProjectsState, then the
 // snapshot is re-read so Home's tiles, the charts and Needs you catch up), notesApi for linked notes.
@@ -59,6 +63,8 @@ function ProjectsView({ id }: ProjectsProps) {
   const [highlight, setHighlight] = useState<string | null>(null);
   const lastId = useRef<string | null>(id);
   const boardScroll = useRef(0);
+  const viewRef = useRef<HTMLDivElement>(null);
+  useFitHeight(viewRef);
   /**
    * The card-to-project morph runs only when the board is scrolled near the top. Further down, the
    * project opens at the top of the page, so a morph would fly in from below the fold; it fades in instead.
@@ -91,6 +97,8 @@ function ProjectsView({ id }: ProjectsProps) {
       // Back on the card you came from; when that project is gone (deleted), on the page itself.
       const card = document.querySelector<HTMLElement>(`[data-project-card="${CSS.escape(prev)}"]`);
       (card ?? document.getElementById("main"))?.focus({ preventScroll: true });
+      // Ultrawide lanes scroll inside themselves and start at the top again: bring the card into view.
+      if (card) revealInScroller(card);
     }
   }, [id]);
 
@@ -114,7 +122,7 @@ function ProjectsView({ id }: ProjectsProps) {
   const trayStatus = { ...boardStatus(store), notice: undefined };
 
   return (
-    <div className={styles.view}>
+    <div ref={viewRef} className={styles.view}>
       {id ? (
         <ProjectDetail key={id} id={id} store={store} now={now} onDeleted={onDeleted} morph={canMorph.current} />
       ) : (

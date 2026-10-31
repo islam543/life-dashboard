@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useImperativeHandle,
@@ -30,6 +31,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { CheckIcon, CopyIcon, TrashIcon, WarnIcon } from "./icons";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { TagInput } from "./TagInput";
+import { ULTRAWIDE_QUERY, useMediaQuery } from "./useMediaQuery";
 import { useNoteDocument, type NoteDocumentApi, type SaveState } from "./useNoteDocument";
 import type { ProjectOptions } from "./useProjectOptions";
 import styles from "./NoteEditor.module.css";
@@ -37,6 +39,8 @@ import styles from "./NoteEditor.module.css";
 // The note editor: title, project, tags, and the markdown body with Write and Preview tabs.
 // Saving is automatic (see useNoteDocument): 800 ms after typing stops, on blur and on Ctrl+S.
 // The status in the header always says where the text is: Saving, Saved 14:05, or Not saved and why.
+// Ultrawide screens (1920px and up) drop the tabs: the editor and a live Preview panel sit side by side
+// (two panels, so the Notes view shows four panes), each text column kept to 75 characters or less.
 
 /** What the Notes view needs from the open editor (leave guard, section rename). */
 export interface EditorHandle {
@@ -143,6 +147,7 @@ function ProjectSelect({
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
         aria-describedby={options.error ? `${id}-error` : undefined}
+        data-tip="Links the note to a project, so it is listed on that project's page; saves at once."
       >
         <option value="">No project</option>
         {!known && value ? (
@@ -161,7 +166,12 @@ function ProjectSelect({
       {options.error ? (
         <p id={`${id}-error`} className={styles.fieldHint}>
           Couldn't load projects, so only the current link is listed.{" "}
-          <button type="button" className={styles.inlineButton} onClick={options.reload}>
+          <button
+            type="button"
+            className={styles.inlineButton}
+            onClick={options.reload}
+            data-tip="Asks the dashboard server for the project list again."
+          >
             Try again
           </button>
         </p>
@@ -281,7 +291,14 @@ function FailureBanner({
       {error ? <p className={styles.bannerText}>Couldn't create the new note. {error}</p> : null}
       <div className={styles.bannerActions}>
         {problem.kind === "gone" ? (
-          <Button size="sm" variant="primary" onClick={() => void saveAsNew()} loading={busy} loadingLabel="Saving">
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => void saveAsNew()}
+            loading={busy}
+            loadingLabel="Saving"
+            tip="Writes your text to a new note file in this section, since the old file is gone."
+          >
             Save as a new note
           </Button>
         ) : problem.kind !== "too_large" ? (
@@ -290,6 +307,11 @@ function FailureBanner({
             loading={retrying}
             loadingLabel="Saving"
             onClick={() => void doc.flush().then((ok) => ok && focusBody())}
+            tip={
+              retryable
+                ? "Saves now instead of waiting for the next automatic retry."
+                : "Sends your current text to the file again."
+            }
           >
             {retryable ? "Retry now" : "Try again"}
           </Button>
@@ -300,6 +322,7 @@ function FailureBanner({
             variant="ghost"
             icon={copied ? <CheckIcon /> : <CopyIcon />}
             onClick={() => void copyText(doc.fields.body).then(setCopied)}
+            tip="Copies the whole note text to the clipboard, so you can keep it somewhere safe."
           >
             {copied ? "Copied" : "Copy text"}
           </Button>
@@ -320,6 +343,10 @@ export function NoteEditor({
   handleRef,
 }: NoteEditorProps) {
   const doc = useNoteDocument(path, onSaved);
+  /** Ultrawide: editor and live preview side by side instead of tabs. */
+  const split = useMediaQuery(ULTRAWIDE_QUERY);
+  /** The live preview re-renders behind the typing, so a long note never slows the keyboard down. */
+  const previewBody = useDeferredValue(doc.fields.body);
   const [mode, setMode] = useState<"write" | "preview">("write");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -421,7 +448,35 @@ export function NoteEditor({
   const bytes = fields.body.length * 3 > SIZE_WARN_BYTES ? byteLength(fields.body) : 0;
   const disabled = doc.conflict !== null;
 
-  return (
+  const textarea = (
+    <textarea
+      ref={bodyRef}
+      className={styles.body}
+      value={fields.body}
+      dir="auto"
+      aria-label="Note text, markdown"
+      spellCheck
+      readOnly={disabled}
+      onChange={(e) => doc.edit({ body: e.target.value })}
+      onBlur={() => void doc.flush()}
+    />
+  );
+
+  const hint = (
+    <span className={styles.tabsHint}>
+      {bytes > 0 ? (
+        <span className="num" data-warn={bytes > MAX_BODY_BYTES ? "" : undefined}>
+          {Math.ceil(bytes / 1024)} KB of 200 KB
+        </span>
+      ) : (
+        <>
+          Markdown <span aria-hidden="true">·</span> <kbd>Ctrl</kbd>+<kbd>S</kbd> saves now
+        </>
+      )}
+    </span>
+  );
+
+  const editorPanel = (
     <Panel
       title={sectionTitle}
       state="ok"
@@ -429,7 +484,7 @@ export function NoteEditor({
       bodyClassName={styles.panelBody}
       action={<SaveStatus save={save} />}
     >
-      <div className={styles.editor} onKeyDown={onKeyDown}>
+      <div className={styles.editor} data-split={split || undefined} onKeyDown={onKeyDown}>
         {doc.draft ? (
           <div className={styles.banner} data-tone="warn" role="status">
             <p className={styles.bannerText}>
@@ -439,10 +494,20 @@ export function NoteEditor({
               </span>
             </p>
             <div className={styles.bannerActions}>
-              <Button size="sm" variant="primary" onClick={thenFocusBody(doc.restoreDraft)}>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={thenFocusBody(doc.restoreDraft)}
+                tip="Replaces the shown text with the copy kept in this browser and saves it to the file."
+              >
                 Restore my text
               </Button>
-              <Button size="sm" variant="ghost" onClick={thenFocusBody(doc.discardDraft)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={thenFocusBody(doc.discardDraft)}
+                tip="Deletes the copy kept in this browser; the note stays as the file has it."
+              >
                 Discard it
               </Button>
             </div>
@@ -462,10 +527,19 @@ export function NoteEditor({
               </span>
             </p>
             <div className={styles.bannerActions}>
-              <Button size="sm" variant="primary" onClick={thenFocusBody(doc.keepMine)}>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={thenFocusBody(doc.keepMine)}
+                tip="Saves your version over the file, replacing the change made outside the dashboard."
+              >
                 Keep mine
               </Button>
-              <Button size="sm" onClick={thenFocusBody(doc.loadTheirs)}>
+              <Button
+                size="sm"
+                onClick={thenFocusBody(doc.loadTheirs)}
+                tip="Shows the file's newer version here and drops your unsaved changes."
+              >
                 Load theirs
               </Button>
             </div>
@@ -477,7 +551,12 @@ export function NoteEditor({
         {doc.notice ? (
           <p className={styles.notice} role="status">
             <span>{doc.notice}</span>
-            <button type="button" className={styles.inlineButton} onClick={thenFocusBody(doc.dismissNotice)}>
+            <button
+              type="button"
+              className={styles.inlineButton}
+              onClick={thenFocusBody(doc.dismissNotice)}
+              data-tip="Hides this message; the note itself does not change."
+            >
               Dismiss
             </button>
           </p>
@@ -513,82 +592,75 @@ export function NoteEditor({
           <TagInput tags={fields.tags} onChange={(tags) => doc.edit({ tags }, true)} onBlur={() => void doc.flush()} />
         </div>
 
-        <div className={styles.tabsRow}>
-          <div role="tablist" aria-label="Note body" className={styles.tabs}>
-            <button
-              ref={writeTabRef}
-              id={ids.writeTab}
-              type="button"
-              role="tab"
-              className={styles.tab}
-              aria-selected={mode === "write"}
-              aria-controls={ids.write}
-              tabIndex={mode === "write" ? 0 : -1}
-              onClick={() => setMode("write")}
-              onKeyDown={onTabKey}
-            >
-              Write
-            </button>
-            <button
-              ref={previewTabRef}
-              id={ids.previewTab}
-              type="button"
-              role="tab"
-              className={styles.tab}
-              aria-selected={mode === "preview"}
-              aria-controls={ids.preview}
-              tabIndex={mode === "preview" ? 0 : -1}
-              onClick={() => {
-                void doc.flush();
-                setMode("preview");
-              }}
-              onKeyDown={onTabKey}
-            >
-              Preview
-            </button>
-          </div>
-          <span className={styles.tabsHint}>
-            {bytes > 0 ? (
-              <span className="num" data-warn={bytes > MAX_BODY_BYTES ? "" : undefined}>
-                {Math.ceil(bytes / 1024)} KB of 200 KB
-              </span>
-            ) : (
-              <>
-                Markdown <span aria-hidden="true">·</span> <kbd>Ctrl</kbd>+<kbd>S</kbd> saves now
-              </>
-            )}
-          </span>
-        </div>
+        {split ? (
+          <>
+            <div className={styles.tabsRow} data-split="">
+              {hint}
+            </div>
+            <div className={styles.writePanel}>{textarea}</div>
+          </>
+        ) : (
+          <>
+            <div className={styles.tabsRow}>
+              <div role="tablist" aria-label="Note body" className={styles.tabs}>
+                <button
+                  ref={writeTabRef}
+                  id={ids.writeTab}
+                  type="button"
+                  role="tab"
+                  className={styles.tab}
+                  aria-selected={mode === "write"}
+                  aria-controls={ids.write}
+                  tabIndex={mode === "write" ? 0 : -1}
+                  onClick={() => setMode("write")}
+                  onKeyDown={onTabKey}
+                  data-tip="Shows the markdown text so you can edit it."
+                >
+                  Write
+                </button>
+                <button
+                  ref={previewTabRef}
+                  id={ids.previewTab}
+                  type="button"
+                  role="tab"
+                  className={styles.tab}
+                  aria-selected={mode === "preview"}
+                  aria-controls={ids.preview}
+                  tabIndex={mode === "preview" ? 0 : -1}
+                  onClick={() => {
+                    void doc.flush();
+                    setMode("preview");
+                  }}
+                  onKeyDown={onTabKey}
+                  data-tip="Saves, then shows the note formatted; tick task boxes there to update the file."
+                >
+                  Preview
+                </button>
+              </div>
+              {hint}
+            </div>
 
-        <div
-          id={ids.write}
-          role="tabpanel"
-          aria-labelledby={ids.writeTab}
-          className={styles.writePanel}
-          hidden={mode !== "write"}
-        >
-          <textarea
-            ref={bodyRef}
-            className={styles.body}
-            value={fields.body}
-            dir="auto"
-            aria-label="Note text, markdown"
-            spellCheck
-            readOnly={disabled}
-            onChange={(e) => doc.edit({ body: e.target.value })}
-            onBlur={() => void doc.flush()}
-          />
-        </div>
-        <div
-          id={ids.preview}
-          role="tabpanel"
-          aria-labelledby={ids.previewTab}
-          className={styles.previewPanel}
-          hidden={mode !== "preview"}
-          tabIndex={0}
-        >
-          {mode === "preview" ? <MarkdownPreview markdown={fields.body} onToggleTask={toggleTask} /> : null}
-        </div>
+            <div
+              id={ids.write}
+              role="tabpanel"
+              aria-labelledby={ids.writeTab}
+              className={styles.writePanel}
+              hidden={mode !== "write"}
+            >
+              {textarea}
+            </div>
+            <div
+              id={ids.preview}
+              role="tabpanel"
+              aria-labelledby={ids.previewTab}
+              className={styles.previewPanel}
+              hidden={mode !== "preview"}
+              tabIndex={0}
+            >
+              {mode === "preview" ? <MarkdownPreview markdown={fields.body} onToggleTask={toggleTask} /> : null}
+            </div>
+          </>
+        )}
 
         <footer className={styles.foot}>
           <p className={styles.fileInfo}>
@@ -609,6 +681,7 @@ export function NoteEditor({
             className={styles.deleteButton}
             icon={<TrashIcon />}
             onClick={() => setConfirmDelete(true)}
+            tip="Asks first, then moves the file to .trash in your notes folder; nothing is erased."
           >
             Delete note
           </Button>
@@ -622,6 +695,8 @@ export function NoteEditor({
         confirmLabel="Move to trash"
         confirmingLabel="Moving to trash"
         cancelLabel="Keep note"
+        confirmTip="Moves the file to .trash in your notes folder; restore it from there in Obsidian."
+        cancelTip="Closes this question and leaves the note where it is."
         onCancel={() => setConfirmDelete(false)}
         onConfirm={async () => {
           await doc.settle();
@@ -641,6 +716,24 @@ export function NoteEditor({
       </ConfirmDialog>
     </Panel>
   );
+
+  if (!split) return editorPanel;
+
+  return (
+    <>
+      {editorPanel}
+      <Panel title="Preview" state="ok" className={styles.panel} bodyClassName={styles.livePreviewBody}>
+        {/* Focusable so the keyboard can scroll a long note. */}
+        <div className={styles.livePreview} role="region" aria-label="Formatted note" tabIndex={0}>
+          <MarkdownPreview
+            markdown={previewBody}
+            onToggleTask={toggleTask}
+            empty="Nothing to preview yet. What you write in the note shows here, formatted, as you type."
+          />
+        </div>
+      </Panel>
+    </>
+  );
 }
 
 function RecoverDraft({ onSave, onRecreated }: { onSave: () => Promise<Note>; onRecreated: (note: Note) => void }) {
@@ -652,6 +745,7 @@ function RecoverDraft({ onSave, onRecreated }: { onSave: () => Promise<Note>; on
         variant="primary"
         loading={busy}
         loadingLabel="Saving"
+        tip="Creates a new note in the same section from the text kept in this browser."
         onClick={async () => {
           setBusy(true);
           setError(null);

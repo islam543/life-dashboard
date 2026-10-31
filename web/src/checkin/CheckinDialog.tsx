@@ -333,7 +333,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
             size="sm"
             icon={<CloseIcon />}
             aria-label="Close check-in"
-            title="Close (Esc)"
+            tip={phase === "saving" ? "Wait for the save to finish; closing now could lose it." : "Closes without saving; answers you typed here are dropped."}
             onClick={onClose}
             disabled={phase === "saving"}
             className={styles.close}
@@ -357,7 +357,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                 </p>
               </div>
               {failure.retry ? (
-                <Button size="sm" onClick={() => formRef.current?.requestSubmit()}>
+                <Button size="sm" onClick={() => formRef.current?.requestSubmit()} tip="Sends the same answers to the server again.">
                   Retry
                 </Button>
               ) : null}
@@ -375,6 +375,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                 max={today}
                 onChange={(e) => changeDate(e.target.value)}
                 onBlur={(e) => blurCheck("date", e.target.value)}
+                data-tip="Picks the day to log, up to a year back; saving a saved day replaces it."
                 aria-invalid={errors.date !== undefined || undefined}
                 aria-describedby={describe("date", id("day-note"))}
               />
@@ -400,6 +401,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                 className={styles.stepButton}
                 aria-label="Half an hour less sleep"
                 onClick={() => stepBy(-1)}
+                data-tip="Takes half an hour off; Arrow Down in the box does the same."
               >
                 <MinusIcon />
               </button>
@@ -418,6 +420,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                 aria-describedby={describe("sleepHours")}
                 data-autofocus=""
                 data-primary=""
+                data-tip="Takes hours slept, like 7.5; Arrow Up and Down step by half an hour."
                 className={`${styles.input} ${styles.stepInput}`}
                 value={values.sleepHours}
                 onChange={(e) => change({ sleepHours: e.target.value }, "sleepHours")}
@@ -435,6 +438,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                 className={styles.stepButton}
                 aria-label="Half an hour more sleep"
                 onClick={() => stepBy(1)}
+                data-tip="Adds half an hour; Arrow Up in the box does the same."
               >
                 <PlusIcon />
               </button>
@@ -450,6 +454,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
             labelId={id("energy-label")}
             error={errors.energy}
             errorId={id("energy-error")}
+            tip="Rates your energy from 1 (Drained) to 5 (Charged); keys 1 to 5 pick directly."
             onPick={(n) => change({ energy: n }, "energy")}
           />
 
@@ -462,6 +467,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
             labelId={id("mood-label")}
             error={errors.mood}
             errorId={id("mood-error")}
+            tip="Rates your mood from 1 (Rough) to 5 (Great); keys 1 to 5 pick directly."
             onPick={(n) => change({ mood: n }, "mood")}
           />
 
@@ -479,6 +485,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
               aria-describedby={values.workoutPick === "custom" ? undefined : describe("workoutMinutes")}
               className={styles.segments}
               data-count={WORKOUT_OPTIONS.length}
+              data-tip="Picks the minutes you worked out; Custom takes any amount up to 600."
             >
               {WORKOUT_OPTIONS.map((pick) => (
                 <label
@@ -520,6 +527,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                     autoComplete="off"
                     spellCheck={false}
                     data-primary=""
+                    data-tip="Takes workout minutes as a whole number, from 0 to 600."
                     className={styles.input}
                     value={values.workoutCustom}
                     onChange={(e) => change({ workoutCustom: e.target.value }, "workoutMinutes")}
@@ -551,6 +559,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
                 autoComplete="off"
                 spellCheck={false}
                 className={styles.input}
+                data-tip="Takes what you spent that day in QAR; it feeds the spend per week chart."
                 value={values.spendQar}
                 onChange={(e) => change({ spendQar: e.target.value }, "spendQar")}
                 onBlur={(e) => blurCheck("spendQar", e.target.value)}
@@ -568,6 +577,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
               id={id("note")}
               rows={2}
               className={`${styles.input} ${styles.note}`}
+              data-tip="Adds an optional note to this day, up to 500 characters."
               value={values.note}
               onChange={(e) => change({ note: e.target.value }, "note")}
               onBlur={(e) => blurCheck("note", e.target.value)}
@@ -620,6 +630,7 @@ function CheckinForm({ initialDate, titleId, busyRef, pristineRef, discardArmed,
             loading={phase === "saving"}
             loadingLabel="Saving"
             className={styles.save}
+            tip="Saves this day's answers; a check-in already saved for the day is replaced."
           >
             Save check-in
           </Button>
@@ -700,11 +711,13 @@ interface ScaleRowProps {
   labelId: string;
   error: string | undefined;
   errorId: string;
+  /** Hover help for the group: what the scale means and the 1 to 5 keys. */
+  tip: string;
   onPick: (n: Scale) => void;
 }
 
 /** 1 to 5 as segmented radio buttons. Arrows move (native radios); keys 1 to 5 pick directly. */
-function ScaleRow({ field, label, words, value, name, labelId, error, errorId, onPick }: ScaleRowProps) {
+function ScaleRow({ field, label, words, value, name, labelId, error, errorId, tip, onPick }: ScaleRowProps) {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const n = Number(e.key);
@@ -722,6 +735,7 @@ function ScaleRow({ field, label, words, value, name, labelId, error, errorId, o
         aria-describedby={error !== undefined ? errorId : undefined}
         className={styles.segments}
         data-count={SCALE.length}
+        data-tip={tip}
         onKeyDown={onKeyDown}
       >
         {SCALE.map((n) => (

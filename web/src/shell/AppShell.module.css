@@ -58,6 +58,28 @@
   font-weight: var(--fw-medium);
 }
 
+/* Ultrawide Home: the page is exactly one screen tall. Header and banner (when shown) take what they
+   need, main gets the rest, and Home's grid fills main, so Home never scrolls the page. The view sits in
+   App.tsx's transition wrapper (main's only child), which passes the height on. Other views are untouched. */
+@media (min-width: 1920px) {
+  .page[data-route="home"] {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    padding-bottom: var(--space-4);
+  }
+
+  .page[data-route="home"] .main {
+    flex: 1 1 0;
+    min-height: 0;
+    margin-top: var(--space-3);
+  }
+
+  .page[data-route="home"] .main > * {
+    height: 100%;
+  }
+}
+
 @keyframes banner-in {
   from {
     opacity: 0;

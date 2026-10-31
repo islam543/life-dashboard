@@ -64,13 +64,15 @@ function Input({ node: _node, ...rest }: WithNode<"input">) {
       checked={!!rest.checked}
       aria-label={task.label}
       onChange={() => toggle(task.line)}
+      data-tip="Ticks or unticks this task in the note's markdown; it saves at once."
     />
   );
 }
 
-function Link({ node: _node, children, href, ...rest }: WithNode<"a">) {
+/** A markdown link title ([text](url "title")) becomes the hover tip, so there is never a second, native tooltip. */
+function Link({ node: _node, children, href, title, ...rest }: WithNode<"a">) {
   return (
-    <a {...rest} href={href} target="_blank" rel="noopener noreferrer">
+    <a {...rest} href={href} target="_blank" rel="noopener noreferrer" data-tip={title || "Opens this link in a new browser tab."}>
       {children}
     </a>
   );
@@ -79,7 +81,13 @@ function Link({ node: _node, children, href, ...rest }: WithNode<"a">) {
 function Image({ src, alt }: WithNode<"img">) {
   if (!src) return <span className={styles.imageNote}>[image{alt ? `: ${alt}` : ""}]</span>;
   return (
-    <a className={styles.imageNote} href={src} target="_blank" rel="noopener noreferrer">
+    <a
+      className={styles.imageNote}
+      href={src}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-tip="Opens the image in a new tab; the preview never loads images itself."
+    >
       Image{alt ? `: ${alt}` : ""}
     </a>
   );
@@ -120,11 +128,17 @@ export interface MarkdownPreviewProps {
   markdown: string;
   /** Flip the task on this 1-based source line. */
   onToggleTask: (line: number) => void;
+  /** Shown when the note has no text yet. */
+  empty?: string;
 }
 
-export const MarkdownPreview = memo(function MarkdownPreview({ markdown, onToggleTask }: MarkdownPreviewProps) {
+export const MarkdownPreview = memo(function MarkdownPreview({
+  markdown,
+  onToggleTask,
+  empty = "Nothing to preview yet. Switch to Write to add text.",
+}: MarkdownPreviewProps) {
   if (!markdown.trim()) {
-    return <p className={styles.empty}>Nothing to preview yet. Switch to Write to add text.</p>;
+    return <p className={styles.empty}>{empty}</p>;
   }
   return (
     <ToggleContext.Provider value={onToggleTask}>

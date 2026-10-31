@@ -6,6 +6,14 @@
   gap: var(--space-4);
 }
 
+/* Readout, then the stage with its legend. A rail and a stage side by side on ultrawide screens (below). */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
 /* ---- Readout: one cell per area, above the map ---- */
 
 .readout {
@@ -459,6 +467,17 @@
   gap: var(--space-1-5);
 }
 
+/* A zoom button at its limit: aria-disabled, so it keeps its hover tip that says why. */
+.inactive {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inactive:hover:not(:disabled) {
+  background: var(--bg-surface-top);
+  border-color: var(--border-strong);
+}
+
 .note {
   position: absolute;
   top: var(--space-3);
@@ -680,6 +699,64 @@
   .skeletonStage {
     height: min(68dvh, 520px);
     min-height: 380px;
+  }
+}
+
+/* ---- Ultrawide (21:9): rail on the left, the stage fills the rest of the width and the window height ----
+   --map-top is the layout's distance from the top of the page, measured in LifeMap.tsx. Below the stage
+   sit the panel's padding and border and the page's bottom spacing. */
+
+@media (min-width: 1920px) {
+  .layout,
+  .skeleton {
+    --map-height: max(440px, calc(100dvh - var(--map-top, 240px) - var(--panel-pad) - var(--hairline) - var(--space-12)));
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "readout stage"
+      "legend stage";
+    gap: var(--space-4) var(--grid-gap);
+  }
+
+  .readout {
+    grid-area: readout;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reading {
+    padding: var(--space-2) var(--space-4);
+  }
+
+  /* Stage and legend become cells of the layout grid. */
+  .frame {
+    display: contents;
+  }
+
+  .stage {
+    grid-area: stage;
+    height: var(--map-height);
+  }
+
+  .legend {
+    grid-area: legend;
+    align-self: end;
+    position: static;
+    width: auto;
+    max-width: none;
+    background: var(--bg-sunken);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .skeletonReadout {
+    grid-area: readout;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skeletonStage {
+    grid-area: stage;
+    height: var(--map-height);
   }
 }
 

@@ -28,6 +28,10 @@ const DONE_FIRST = 30;
 /** How long a ticked task stays in place, showing its check, before it moves to Done. */
 const SETTLE_MS = 650;
 
+/** Hover help on a new task's controls until the server has saved it. */
+const PENDING_TIP = "Works once this new task finishes saving, in a moment.";
+const SET_DUE_TIP = "Sets a due date; Needs you flags the task 3 days ahead while the project is Active.";
+
 function patchTask(s: ProjectsState, projectId: string, taskId: string, patch: Partial<ProjectTask>): ProjectsState {
   return {
     ...s,
@@ -249,10 +253,17 @@ export function TaskList({ project, store, now }: { project: Project; store: Pro
             type="date"
             className={`${partStyles.input} ${styles.addDue}`}
             aria-label="Due date for the new task (optional)"
+            data-tip="Sets an optional due date; Needs you flags it 3 days ahead while the project is Active."
             value={due}
             onChange={(e) => setDue(e.target.value)}
           />
-          <Button type="submit" variant="secondary" icon={<PlusIcon />} className={styles.addButton}>
+          <Button
+            type="submit"
+            variant="secondary"
+            icon={<PlusIcon />}
+            className={styles.addButton}
+            tip="Adds the task to the open list; Enter in the text field does the same."
+          >
             Add
           </Button>
         </div>
@@ -288,7 +299,14 @@ export function TaskList({ project, store, now }: { project: Project; store: Pro
         </ul>
       )}
       {open.length > OPEN_FIRST ? (
-        <Button variant="ghost" size="sm" className={styles.more} aria-expanded={showAllOpen} onClick={() => setShowAllOpen((v) => !v)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={styles.more}
+          aria-expanded={showAllOpen}
+          onClick={() => setShowAllOpen((v) => !v)}
+          tip={showAllOpen ? `Shows only the first ${OPEN_FIRST} open tasks again.` : `Lists every open task, not just the first ${OPEN_FIRST}.`}
+        >
           {showAllOpen ? "Show fewer" : `Show all ${open.length} open tasks`}
         </Button>
       ) : null}
@@ -301,6 +319,7 @@ export function TaskList({ project, store, now }: { project: Project; store: Pro
             aria-expanded={doneOpen}
             aria-controls={`task-${uid}-done`}
             onClick={() => setDoneOpen((v) => !v)}
+            data-tip={doneOpen ? "Hides the finished tasks." : "Shows finished tasks; untick one to reopen it."}
           >
             <span className={styles.chevron} data-open={doneOpen || undefined}>
               <ChevronIcon />
@@ -311,7 +330,14 @@ export function TaskList({ project, store, now }: { project: Project; store: Pro
             {doneOpen ? doneShown.map((t) => <li key={t.id} className={styles.item}>{row(t)}</li>) : null}
           </ul>
           {doneOpen && done.length > DONE_FIRST ? (
-            <Button variant="ghost" size="sm" className={styles.more} aria-expanded={showAllDone} onClick={() => setShowAllDone((v) => !v)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.more}
+              aria-expanded={showAllDone}
+              onClick={() => setShowAllDone((v) => !v)}
+              tip={showAllDone ? `Shows only the first ${DONE_FIRST} done tasks again.` : `Lists every done task, not just the first ${DONE_FIRST}.`}
+            >
               {showAllDone ? "Show fewer" : `Show all ${plural(done.length, "done task")}`}
             </Button>
           ) : null}
@@ -350,6 +376,13 @@ function TaskRow({
           disabled={pending}
           onChange={onToggle}
           aria-label={task.text}
+          data-tip={
+            pending
+              ? PENDING_TIP
+              : task.done
+                ? "Reopens the task and moves it back to the open list."
+                : "Marks the task done; it moves to Done a moment later."
+          }
         />
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
           <rect className={styles.box} x="1.5" y="1.5" width="15" height="15" rx="4" />
@@ -366,6 +399,7 @@ function TaskRow({
           onSave={onSaveText}
           className={styles.textValue}
           quietButton
+          tip="Edits the task; Enter saves, Esc cancels."
         />
       </span>
       <DueEditor due={task.due} done={task.done} now={now} taskText={task.text} onSave={onSaveDue} disabled={pending} />
@@ -376,7 +410,7 @@ function TaskRow({
         className={styles.delete}
         data-part="delete"
         aria-label={`Delete task: ${task.text}`}
-        title="Delete task"
+        tip={pending ? PENDING_TIP : "Deletes the task; Undo in the message or Ctrl+Z brings it back within 5 seconds."}
         onClick={onDelete}
         disabled={pending}
       />
@@ -480,7 +514,7 @@ function DueEditor({
         data-empty={!info || undefined}
         disabled={disabled}
         aria-label={info ? `Due ${info.label}. Change the due date of: ${taskText}` : `Set a due date for: ${taskText}`}
-        title={info ? "Change due date" : "Set due date"}
+        data-tip={disabled ? PENDING_TIP : info ? "Changes the due date; Enter saves, Esc cancels, an empty date clears it." : SET_DUE_TIP}
         onClick={() => {
           handled.current = false;
           setDraft(due ?? "");

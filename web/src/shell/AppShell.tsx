@@ -40,7 +40,13 @@ function OfflineBanner() {
       <p className={styles.bannerText}>
         <strong>{title}</strong> <span>{body}</span>
       </p>
-      <Button size="sm" onClick={() => void retry()} loading={retrying} loadingLabel="Retrying">
+      <Button
+        size="sm"
+        onClick={() => void retry()}
+        loading={retrying}
+        loadingLabel="Retrying"
+        tip="Asks the local server for the latest data again; what is on screen stays meanwhile."
+      >
         Retry
       </Button>
     </div>
@@ -71,10 +77,12 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
 
   return (
     <>
-      <div ref={pageRef} className={styles.page}>
+      {/* data-route lets a view claim the screen height on ultrawide screens (Home, see AppShell.module.css). */}
+      <div ref={pageRef} className={styles.page} data-route={route}>
         <a
           className={styles.skip}
           href="#main"
+          data-tip="Moves keyboard focus past the header to the current view."
           onClick={(e) => {
             // The hash is the router, so move focus without touching it.
             e.preventDefault();

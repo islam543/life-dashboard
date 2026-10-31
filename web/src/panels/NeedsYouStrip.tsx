@@ -103,6 +103,34 @@ function ExternalIcon() {
   );
 }
 
+/** Readable names for the sites links go to. Anything else shows its host name. */
+const SITE_NAMES: readonly [RegExp, string][] = [
+  [/(^|\.)github\.com$/, "GitHub"],
+  [/(^|\.)atlassian\.net$/, "Jira"],
+  [/(^|\.)gitlab\.com$/, "GitLab"],
+  [/^calendar\.google\.com$/, "Google Calendar"],
+  [/^mail\.google\.com$/, "Gmail"],
+];
+
+/**
+ * Hover help for a link to a source item, without the full stop: "Opens it on GitHub in a new tab",
+ * "Opens it on the Projects page". Shared by Needs you and Next moves.
+ */
+export function opensIn(url: string): string {
+  if (url.startsWith("#")) {
+    if (url.startsWith("#/projects")) return "Opens it on the Projects page of this dashboard";
+    if (url.startsWith("#/notes")) return "Opens the note in the Notes view of this dashboard";
+    return "Opens it here in the dashboard";
+  }
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    const site = SITE_NAMES.find(([re]) => re.test(host))?.[1] ?? host;
+    return `Opens it on ${site} in a new tab`;
+  } catch {
+    return "Opens it in a new tab";
+  }
+}
+
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
@@ -113,6 +141,10 @@ function NeedCard({ item, index, now, fresh }: { item: NeedsYouItem; index: numb
   const left = dueRemaining(item.dueAt, now);
   const overdue = due?.startsWith("Overdue") ?? false;
   const delay = Math.min(index, 10) * MOTION.stagger;
+  // The link covers the whole card, so its tip also carries the exact due time.
+  const tip = item.url
+    ? `${opensIn(item.url)}${item.dueAt ? `; due ${fullDate.format(new Date(item.dueAt))}` : ""}.`
+    : undefined;
 
   return (
     <motion.li
@@ -130,9 +162,14 @@ function NeedCard({ item, index, now, fresh }: { item: NeedsYouItem; index: numb
         <span className={styles.area}>{areaLabel(item.area)}</span>
       </div>
 
-      <h3 className={styles.cardTitle} title={item.title}>
+      <h3 className={styles.cardTitle} title={item.url ? undefined : item.title}>
         {item.url ? (
-          <a className={styles.cardLink} href={item.url} {...(item.url?.startsWith("#") ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
+          <a
+            className={styles.cardLink}
+            href={item.url}
+            data-tip={tip}
+            {...(item.url?.startsWith("#") ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+          >
             <span className={styles.clamp}>{item.title}</span>
             {item.url?.startsWith("#") ? null : (
               <>
@@ -147,7 +184,7 @@ function NeedCard({ item, index, now, fresh }: { item: NeedsYouItem; index: numb
       </h3>
 
       {item.detail ? (
-        <p className={styles.detail} title={item.detail}>
+        <p className={styles.detail} title={item.url ? undefined : item.detail}>
           {item.detail}
         </p>
       ) : null}
@@ -157,7 +194,7 @@ function NeedCard({ item, index, now, fresh }: { item: NeedsYouItem; index: numb
           <time
             className={[styles.dueText, overdue ? styles.overdue : ""].filter(Boolean).join(" ")}
             dateTime={item.dueAt}
-            title={fullDate.format(new Date(item.dueAt))}
+            title={item.url ? undefined : fullDate.format(new Date(item.dueAt))}
           >
             {due}
           </time>
@@ -270,6 +307,7 @@ export function NeedsYouStrip() {
   return (
     <Panel
       title="Needs you"
+      fit
       state={state}
       message={status.message}
       hint={status.hint}

@@ -267,6 +267,58 @@
   overflow-wrap: anywhere;
 }
 
+/* Ultrawide: one row, in DOM order so Tab follows what you see. Greeting and date on one line, the
+   actions beside them, the view switch centred, sources at the right end. The two tiers' wrappers step
+   aside (display: contents) and the hairline rail moves to the header's bottom edge. */
+@media (min-width: 1920px) {
+  .header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--space-4) 0 var(--space-3);
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .top,
+  .bar {
+    display: contents;
+  }
+
+  .intro {
+    display: flex;
+    align-items: baseline;
+    flex: none;
+    gap: var(--space-3);
+  }
+
+  .actions,
+  .sources,
+  .sourceList {
+    flex-wrap: nowrap;
+  }
+
+  .actions {
+    flex: none;
+  }
+
+  .views {
+    flex: none;
+    margin-inline: auto;
+  }
+
+  .sources {
+    flex: 0 1 auto;
+  }
+}
+
+/* 1920 to 2239 px: source names would push the row past the screen edge, so only the status dots show.
+   Hover or focus on a dot still names the source. */
+@media (min-width: 1920px) and (max-width: 2239px) {
+  .sourceName {
+    display: none;
+  }
+}
+
 @media (max-width: 720px) {
   .actions {
     justify-content: flex-start;

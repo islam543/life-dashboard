@@ -1,7 +1,9 @@
 /* Notes view layout. Tokens only.
    Desktop (1080px and up): sections | notes | editor, filling the window under the header; each pane
    scrolls inside. Tablet (720 to 1079px): sections above notes on the left, editor on the right.
-   Phone (under 720px): one pane at a time, chosen by data-pane, with a back control on top. */
+   Phone (under 720px): one pane at a time, chosen by data-pane, with a back control on top.
+   Ultrawide (1920px and up): four panes, sections | notes | editor | live preview (the editor pane
+   holds NoteEditor's two panels side by side). */
 
 .layout {
   display: grid;
@@ -159,5 +161,24 @@
 
   .treePane {
     max-height: none;
+  }
+}
+
+/* Ultrawide: sections | notes | editor | preview. The editor pane splits into NoteEditor's two panels;
+   a single panel there (no note open, loading, error) spans both columns. */
+@media (min-width: 1920px) {
+  .layout {
+    grid-template-columns: minmax(220px, 260px) minmax(280px, 380px) minmax(0, 1fr);
+  }
+
+  .editorPane {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--grid-gap);
+  }
+
+  .editorPane > :only-child {
+    grid-column: 1 / -1;
   }
 }

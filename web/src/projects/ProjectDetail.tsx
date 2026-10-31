@@ -47,8 +47,37 @@ import styles from "./ProjectDetail.module.css";
 // (shared layoutId). Everything edits in place: name, description, status, area, deadline, goals,
 // tasks and sources. Linked notes link to #/notes/<path>; New meeting note writes a note in
 // "Meeting notes" linked to this project and opens it. Delete asks first and says what happens.
+// Ultrawide (>=1920px): three columns that fill the window, each scrolling inside itself:
+// overview and goals | tasks | time, notes and sources (CSS only, see .wide).
 
 const MEETING_SECTION = "Meeting notes";
+
+/** Hover help on each status option: where the project goes and what it changes. Saves at once. */
+const STATUS_TIP: Record<ProjectStatus, string> = {
+  active: "Sets it to Active: first on the board, and its deadline and due tasks reach Needs you.",
+  paused: "Pauses it: moves the card to Paused and keeps its deadlines out of Needs you.",
+  idea: "Parks it in Ideas, out of Needs you, until you set it to Active.",
+  done: "Marks it Done: the card moves to the folded Done column on the board.",
+};
+
+/** Hover help for New meeting note: what it does, or why it is off right now. */
+function meetingNoteTip(status: NotesState["status"]): string {
+  switch (status) {
+    case "ok":
+    case "stale":
+      return `Creates a dated note in ${MEETING_SECTION}, linked to this project, and opens it.`;
+    case "not_connected":
+      return "Needs a notes folder first; set NOTES_DIR in .env.";
+    case "failed":
+      return "Needs Notes to be reachable; retry in the Notes panel.";
+    case "error":
+      return "Needs a readable notes folder; the Notes panel says what went wrong.";
+    case "never_run":
+      return "Needs your notes to be read first, which happens on the next refresh.";
+    default:
+      return "Needs your notes to finish loading first.";
+  }
+}
 
 export interface ProjectDetailProps {
   id: string;
@@ -84,7 +113,7 @@ export function ProjectDetail({ id, store, now, onDeleted, morph = true }: Proje
             title="Project not found."
             body="It may have been deleted in another tab, or the link is out of date. A deleted project's sources are back in Untracked."
             action={
-              <ButtonLink href={projectHash()} variant="primary" icon={<BackIcon />}>
+              <ButtonLink href={projectHash()} variant="primary" icon={<BackIcon />} tip="Returns to the board with all your projects.">
                 All projects
               </ButtonLink>
             }
@@ -98,7 +127,14 @@ export function ProjectDetail({ id, store, now, onDeleted, morph = true }: Proje
 
 function BackLink() {
   return (
-    <ButtonLink href={projectHash()} variant="ghost" size="sm" icon={<BackIcon />} className={styles.back}>
+    <ButtonLink
+      href={projectHash()}
+      variant="ghost"
+      size="sm"
+      icon={<BackIcon />}
+      className={styles.back}
+      tip="Returns to the board and puts you back on this project's card."
+    >
       All projects
     </ButtonLink>
   );
@@ -197,15 +233,10 @@ function DetailBody({
   };
 
   const notesReady = store.notes.status === "ok" || store.notes.status === "stale";
-  const noteBlocked =
-    store.notes.status === "not_connected"
-      ? "The notes folder is not set up yet."
-      : store.notes.status === "failed"
-        ? "Notes can't be reached right now."
-        : null;
+  const noteTip = meetingNoteTip(store.notes.status);
 
   return (
-    <div className={styles.detail}>
+    <div className={`${styles.detail} ${styles.wide}`}>
       <BackLink />
       {notice ? (
         <p className={styles.notice}>
@@ -248,11 +279,17 @@ function DetailBody({
                 loading={creatingNote}
                 loadingLabel="Starting note"
                 disabled={!notesReady}
-                title={noteBlocked ?? `Start a meeting note in ${MEETING_SECTION}, linked to this project`}
+                tip={noteTip}
               >
                 New meeting note
               </Button>
-              <Button size="sm" icon={<TrashIcon />} className={partStyles.danger} onClick={() => setConfirming(true)}>
+              <Button
+                size="sm"
+                icon={<TrashIcon />}
+                className={partStyles.danger}
+                onClick={() => setConfirming(true)}
+                tip="Asks first, then deletes the project; its sources go back to Untracked."
+              >
                 Delete
               </Button>
             </div>
@@ -268,6 +305,7 @@ function DetailBody({
               maxLength={LIMITS.name}
               requiredMessage="A project needs a name."
               className={styles.title}
+              tip="Renames the project; Enter saves, Esc cancels."
               onSave={(name) => save({ name })}
             />
           </div>
@@ -281,6 +319,11 @@ function DetailBody({
               maxLength={LIMITS.description}
               multiline
               className={styles.descriptionText}
+              tip={
+                project.description
+                  ? "Edits the description; Ctrl+Enter saves, Esc cancels."
+                  : "Adds a line on what this project is for; Ctrl+Enter saves, Esc cancels."
+              }
               onSave={(description) => save({ description })}
             />
           </div>
@@ -292,7 +335,7 @@ function DetailBody({
               </span>
               <Segmented
                 label="Status"
-                options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+                options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s], tip: STATUS_TIP[s] }))}
                 value={project.status}
                 onChange={setStatus}
               />
@@ -301,7 +344,16 @@ function DetailBody({
               <span className={styles.controlLabel} aria-hidden="true">
                 Area
               </span>
-              <Segmented label="Area" options={AREA_ORDER.map((a) => ({ value: a, label: AREA_LABEL[a] }))} value={project.area} onChange={setArea} />
+              <Segmented
+                label="Area"
+                options={AREA_ORDER.map((a) => ({
+                  value: a,
+                  label: AREA_LABEL[a],
+                  tip: `Moves the project to ${AREA_LABEL[a]}, for the board's Area filter and the life map.`,
+                }))}
+                value={project.area}
+                onChange={setArea}
+              />
             </div>
             <div className={styles.control}>
               <span className={styles.controlLabel} aria-hidden="true">
@@ -351,10 +403,22 @@ function DetailBody({
 
       <div className={styles.columns}>
         <div className={styles.main}>
-          <Panel title="Tasks" state="ok" meta={`${project.tasks.filter((t) => !t.done).length} open`}>
+          <Panel
+            title="Tasks"
+            state="ok"
+            meta={`${project.tasks.filter((t) => !t.done).length} open`}
+            className={styles.tasksPanel}
+            bodyClassName={styles.scrollBody}
+          >
             <TaskList project={project} store={store} now={now} />
           </Panel>
-          <Panel title="Goals" state="ok" meta={`${project.goals.length} of ${LIMITS.goals}`}>
+          <Panel
+            title="Goals"
+            state="ok"
+            meta={`${project.goals.length} of ${LIMITS.goals}`}
+            className={styles.goalsPanel}
+            bodyClassName={styles.scrollBody}
+          >
             <Goals project={project} onSave={(goals) => save({ goals })} />
           </Panel>
         </div>
@@ -371,7 +435,15 @@ function DetailBody({
             meta={linked ? String(linked.length) : undefined}
             action={
               notesReady ? (
-                <Button size="sm" variant="ghost" icon={<PlusIcon />} onClick={() => void newMeetingNote()} loading={creatingNote} loadingLabel="Starting">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<PlusIcon />}
+                  onClick={() => void newMeetingNote()}
+                  loading={creatingNote}
+                  loadingLabel="Starting"
+                  tip={noteTip}
+                >
                   Meeting note
                 </Button>
               ) : undefined
@@ -455,6 +527,7 @@ function DeadlineField({ deadline, onSave }: { deadline: string | null; onSave: 
         type="date"
         className={partStyles.input}
         aria-label="Deadline. Saves when you leave the field."
+        data-tip="Saves when you leave the field; Needs you flags Active projects 3 days before."
         value={draft}
         readOnly={saving}
         aria-invalid={error ? true : undefined}
@@ -476,7 +549,7 @@ function DeadlineField({ deadline, onSave }: { deadline: string | null; onSave: 
           variant="ghost"
           icon={<CloseIcon />}
           aria-label="Clear the deadline"
-          title="Clear the deadline"
+          tip={saving ? "Works again once the deadline finishes saving." : "Removes the deadline; its countdown leaves the card and Needs you."}
           onClick={() => {
             setDraft("");
             // The clear button goes away with the deadline; keep focus on the field.
@@ -503,6 +576,7 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
   const inputRef = useRef<HTMLInputElement>(null);
   const goals = project.goals;
   const full = goals.length >= LIMITS.goals;
+  const fullTip = `Holds ${LIMITS.goals} goals at most; remove one to add another.`;
 
   const add = async () => {
     const value = draft.trim();
@@ -548,6 +622,7 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
                   maxLength={LIMITS.goal}
                   requiredMessage="A goal needs some text. Remove it instead if it is not needed."
                   quietButton
+                  tip="Edits this goal; Enter saves, Esc cancels."
                   onSave={(next) => onSave(goals.map((x, j) => (j === i ? next : x)))}
                 />
               </span>
@@ -557,7 +632,7 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
                 icon={<CloseIcon />}
                 className={styles.goalRemove}
                 aria-label={`Remove goal ${i + 1}: ${g}`}
-                title="Remove goal"
+                tip="Deletes this goal right away; there is no undo."
                 data-part="remove-goal"
                 onClick={(e) => {
                   setError(null);
@@ -593,12 +668,21 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
           placeholder={full ? `${LIMITS.goals} goals is the limit` : "Add a goal and press Enter"}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `goal-${uid}-error` : undefined}
+          data-tip={full ? fullTip : undefined}
           onChange={(e) => {
             setDraft(e.target.value);
             if (error) setError(null);
           }}
         />
-        <Button type="submit" size="sm" icon={<PlusIcon />} disabled={full} loading={busy} loadingLabel="Adding">
+        <Button
+          type="submit"
+          size="sm"
+          icon={<PlusIcon />}
+          disabled={full}
+          loading={busy}
+          loadingLabel="Adding"
+          tip={full ? fullTip : "Adds the goal to the end of the list; Enter in the field does the same."}
+        >
           Add goal
         </Button>
         {error ? (
@@ -626,7 +710,7 @@ function LinkedNotes({ notes }: { notes: NoteMeta[] }) {
     <ul className={styles.notes}>
       {notes.slice(0, 12).map((n) => (
         <li key={n.path} className={styles.note}>
-          <a href={noteHash(n.path)} className={styles.noteLink} dir="auto">
+          <a href={noteHash(n.path)} className={styles.noteLink} dir="auto" data-tip="Opens this note in Notes to read or edit it.">
             {n.title || displayName(n.path)}
           </a>
           <span className={styles.noteMeta}>
@@ -644,7 +728,9 @@ function LinkedNotes({ notes }: { notes: NoteMeta[] }) {
       ))}
       {notes.length > 12 ? (
         <li className={styles.noteMore}>
-          <a href={noteHash()}>{plural(notes.length - 12, "more note")} in Notes</a>
+          <a href={noteHash()} data-tip="Opens the Notes view, where every note in your vault is listed.">
+            {plural(notes.length - 12, "more note")} in Notes
+          </a>
         </li>
       ) : null}
     </ul>
@@ -716,7 +802,7 @@ function Sources({ project, store }: { project: Project; store: ProjectsStore })
                       icon={<CloseIcon />}
                       className={styles.sourceRemove}
                       aria-label={`Remove ${name} from this project`}
-                      title="Move to Untracked"
+                      tip="Moves this source back to Untracked so it stops counting here; Undo is offered."
                       data-part="remove-source"
                       onClick={(e) => {
                         const row = e.currentTarget.closest("li");
@@ -736,6 +822,7 @@ function Sources({ project, store }: { project: Project; store: ProjectsStore })
         label="Add source"
         icon={<PlusIcon />}
         searchLabel="Find a session or repo"
+        tip="Adds an untracked session or repo, so its time and commits count here."
         loading={busy}
         options={untracked.map((d) => ({
           value: `${d.kind}:${d.name}`,

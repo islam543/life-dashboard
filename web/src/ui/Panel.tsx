@@ -1,9 +1,10 @@
 import { motion } from "motion/react";
 import { useId, type ReactNode } from "react";
 import type { Area, Snapshot } from "../../../shared/types";
-import { useDetailTrigger } from "../context/DetailContext";
+import { tileLayoutId, useDetailTrigger } from "../context/DetailContext";
 import type { SnapshotResult } from "../hooks/useSnapshot";
 import { MOTION } from "../hooks/useReducedMotion";
+import { workTabFromLayoutId, type WorkTab } from "../lib/detailRows";
 import { relativeTime, sourceLabel, type SourceKey } from "../lib/format";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
@@ -23,6 +24,8 @@ import styles from "./Panel.module.css";
 //
 // `detail` turns the title into a button that opens that area's detail view, and puts
 // layoutId tileLayoutId(area, key) on the panel so it expands into the overlay (see DetailContext).
+// `fit` (ultrawide only): the panel takes its parent's height and its body scrolls when the content is
+// taller, so a view can fill one screen without the page scrolling (Home at 1920px and up).
 
 export type PanelState = "loading" | "empty" | "error" | "not_connected" | "ok";
 export type PanelSkeleton = "rows" | "chart" | "tiles" | "cards";
@@ -45,6 +48,8 @@ export interface PanelProps {
   onRetry?: () => void;
   /** Spinner on Retry while it runs. */
   retrying?: boolean;
+  /** Hover help on Retry: what retrying does. */
+  retryTip?: string;
   /** state "ok" with a caveat (stale data, last update failed): one amber line above the content. */
   notice?: string;
   /** Loading placeholder shape. Default "rows". Pass a node for a custom one. */
@@ -53,6 +58,8 @@ export interface PanelProps {
   detail?: { area: Area; key?: string };
   /** "ai" adds the violet accent for AI content (Next moves). */
   tone?: "default" | "ai";
+  /** At 1920px and wider: fill the parent's height and scroll the body inside it. No effect below. */
+  fit?: boolean;
   className?: string;
   bodyClassName?: string;
 }
@@ -85,7 +92,7 @@ function ExpandIcon() {
 }
 
 function StateBody(props: PanelProps & { titleText: string }) {
-  const { state, message, hint, onRetry, retrying, notice, skeleton, children, titleText } = props;
+  const { state, message, hint, onRetry, retrying, retryTip, notice, skeleton, children, titleText } = props;
   switch (state) {
     case "loading":
       return (
@@ -105,7 +112,14 @@ function StateBody(props: PanelProps & { titleText: string }) {
           </p>
           {hint ? <p className={styles.problemHint}>{hint}</p> : null}
           {onRetry ? (
-            <Button size="sm" onClick={onRetry} loading={retrying} loadingLabel="Retrying" className={styles.retry}>
+            <Button
+              size="sm"
+              onClick={onRetry}
+              loading={retrying}
+              loadingLabel="Retrying"
+              className={styles.retry}
+              tip={retryTip ?? "Tries loading this panel's data again; the rest of the page stays as it is."}
+            >
               Retry
             </Button>
           ) : null}
@@ -137,11 +151,35 @@ function StateBody(props: PanelProps & { titleText: string }) {
   }
 }
 
+const WORK_TAB_TIP: Record<WorkTab, string> = {
+  jira: "Opens Work details on the Jira tab: every open issue, with filters and sorting.",
+  prs: "Opens Work details on the Pull requests tab, with the ones waiting on you first.",
+  ci: "Opens Work details on the CI tab: the latest run on each repo's default branch.",
+  time: "Opens Work details on the Time tab: time per project and commits, last 30 days.",
+};
+
+const AREA_TIP: Record<Area, string> = {
+  work: "Opens Work details: Jira issues, pull requests, CI runs and 30 days of time.",
+  learning: "Opens Learning details: the current cycle, your streak and the life agenda.",
+  personal: "Opens Personal details: sleep, mood, workouts, spend and the check-in log.",
+  calendar: "Opens your agenda beside the emails that are waiting on a reply.",
+  email: "Opens the emails waiting on a reply beside your agenda.",
+};
+
+/** Hover help for anything that opens a detail view: what opens, and on which tab for Work. */
+export function detailTip(area: Area, key?: string): string {
+  if (area === "work") {
+    const tab = workTabFromLayoutId(tileLayoutId(area, key));
+    if (tab) return WORK_TAB_TIP[tab];
+  }
+  return AREA_TIP[area];
+}
+
 function PanelTitle({ id, title, detail }: { id: string; title: string; detail: { area: Area; key?: string } }) {
   const trigger = useDetailTrigger(detail.area, detail.key);
   return (
     <h2 id={id} className={styles.title}>
-      <button type="button" className={styles.titleButton} onClick={trigger.open}>
+      <button type="button" className={styles.titleButton} onClick={trigger.open} data-tip={detailTip(detail.area, detail.key)}>
         <span>{title}</span>
         <span className="sr-only">, open details</span>
         <ExpandIcon />
@@ -178,9 +216,9 @@ function Shell({ className, titleId, busy, children, motionProps }: ShellProps) 
 }
 
 export function Panel(props: PanelProps) {
-  const { title, state, action, meta, detail, tone = "default", className, bodyClassName } = props;
+  const { title, state, action, meta, detail, tone = "default", fit = false, className, bodyClassName } = props;
   const titleId = `panel-${useId().replace(/:/g, "")}`;
-  const classes = [styles.panel, tone === "ai" ? styles.ai : "", className].filter(Boolean).join(" ");
+  const classes = [styles.panel, tone === "ai" ? styles.ai : "", fit ? styles.fit : "", className].filter(Boolean).join(" ");
 
   const inner = (
     <>
@@ -231,6 +269,7 @@ export interface PanelStatus {
   hint?: string;
   onRetry?: () => void;
   retrying?: boolean;
+  retryTip?: string;
   notice?: string;
 }
 
@@ -255,7 +294,13 @@ export function panelFromSource(
   const { data } = snap;
   if (!data) {
     if (snap.error && !snap.loading) {
-      return { state: "error", message: "Couldn't load the dashboard data.", hint: snap.error, onRetry: () => void snap.refresh() };
+      return {
+        state: "error",
+        message: "Couldn't load the dashboard data.",
+        hint: snap.error,
+        onRetry: () => void snap.refresh(),
+        retryTip: "Asks the local server for the dashboard data again.",
+      };
     }
     return { state: "loading" };
   }
@@ -283,6 +328,7 @@ export function panelFromSource(
           hint: src.message,
           onRetry: () => void snap.collect(),
           retrying: snap.collecting,
+          retryTip: `Re-reads all 7 sources, ${name} included; this takes a few seconds.`,
         };
       }
       // updatedAt is the time of the last ok result, so it dates the data still on screen.

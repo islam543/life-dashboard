@@ -37,6 +37,13 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 const MAX_TOASTS = 3;
 
+/** Hover help for a toast's action button, by its label. */
+function actionTip(label: string): string | undefined {
+  if (label === "Undo") return "Reverses this change; Ctrl+Z does the same while the message is up.";
+  if (label === "Open") return "Opens the new project's page.";
+  return undefined;
+}
+
 export function useToasts(): ToastApi {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToasts must be used inside <ToastProvider>");
@@ -177,7 +184,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     size="sm"
                     variant="secondary"
                     className={styles.action}
-                    title={t.action.label === "Undo" ? "Undo (Ctrl+Z)" : undefined}
+                    tip={actionTip(t.action.label)}
                     aria-keyshortcuts={t.action.label === "Undo" ? "Control+Z" : undefined}
                     onClick={() => {
                       const action = t.action;
@@ -194,6 +201,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   icon={<CloseIcon />}
                   className={styles.close}
                   aria-label="Close message"
+                  tip={t.onExpire ? "Closes this message and makes the delete final now." : "Closes this message now instead of in a few seconds."}
                   onClick={() => remove(t.id, "expire")}
                 />
               </motion.li>

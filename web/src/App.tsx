@@ -9,6 +9,7 @@ import { Home } from "./views/Home";
 import { LifeMap } from "./views/LifeMap";
 import { Notes } from "./views/Notes";
 import { Projects } from "./views/Projects";
+import { TipLayer } from "./ui/TipLayer";
 
 // Routes live in the hash (see lib/route.ts): "#/" Home (glance), "#/projects[/<id>]",
 // "#/notes[/<path>]", "#/map" Life map (explore).
@@ -70,6 +71,7 @@ export default function App() {
               </motion.div>
             </AnimatePresence>
           </AppShell>
+          <TipLayer />
         </CheckinProvider>
       </DetailProvider>
     </MotionConfig>

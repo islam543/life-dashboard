@@ -29,6 +29,7 @@ import {
   hoursSince,
   lastNDays,
   paginate,
+  PAGE_SIZE,
   parseDay,
   priorityRank,
   prStatus,
@@ -153,8 +154,22 @@ interface TipBox {
  * One line of text cut with an ellipsis. When it is cut, hovering or focusing it shows the full text
  * in a tooltip (Escape hides it without closing the view). With `href` it is an external link that
  * opens in a new tab. Screen readers already get the full text, so the tooltip is aria-hidden.
+ * `tip` is hover help (where the link goes). Uncut, it is a normal data-tip; cut, it rides along under
+ * the full text in this tooltip, so there are never two tooltips at once.
  */
-export function TruncText({ text, href, className, children }: { text: string; href?: string; className?: string; children?: ReactNode }) {
+export function TruncText({
+  text,
+  href,
+  className,
+  children,
+  tip: help,
+}: {
+  text: string;
+  href?: string;
+  className?: string;
+  children?: ReactNode;
+  tip?: string;
+}) {
   const ref = useRef<HTMLElement | null>(null);
   const hideTimer = useRef<number | undefined>(undefined);
   const [tip, setTip] = useState<TipBox | null>(null);
@@ -203,7 +218,7 @@ export function TruncText({ text, href, className, children }: { text: string; h
   const [cut, setCut] = useState(false);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (href || !el) return;
+    if (!el) return;
     const measure = () => setCut(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
     measure();
     const ro = new ResizeObserver(measure);
@@ -223,11 +238,11 @@ export function TruncText({ text, href, className, children }: { text: string; h
   return (
     <>
       {href ? (
-        <a {...handlers} href={href} target="_blank" rel="noopener noreferrer">
+        <a {...handlers} href={href} target="_blank" rel="noopener noreferrer" data-tip={cut ? undefined : help}>
           {children ?? text}
         </a>
       ) : (
-        <span {...handlers} tabIndex={cut ? 0 : undefined}>
+        <span {...handlers} tabIndex={cut ? 0 : undefined} data-tip={cut ? undefined : help}>
           {children ?? text}
         </span>
       )}
@@ -241,6 +256,7 @@ export function TruncText({ text, href, className, children }: { text: string; h
               onMouseLeave={() => close()}
             >
               {text}
+              {help ? <span className={styles.tooltipNote}>{help}</span> : null}
             </span>,
             document.body,
           )
@@ -282,6 +298,13 @@ function ChipGroup({ group, selected, onToggle }: { group: FilterGroup; selected
               className={cx(styles.chip, on && styles.chipOn, f.count === 0 && !on && styles.chipZero)}
               aria-pressed={on}
               onClick={() => onToggle(f.value)}
+              data-tip={
+                on
+                  ? "Removes this value from the filter."
+                  : f.count === 0
+                    ? "Adds this value, though nothing matches it with the other filters on."
+                    : "Adds this value to the filter; picks in one row widen it, across rows narrow it."
+              }
             >
               {on ? (
                 <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" focusable="false">
@@ -294,7 +317,13 @@ function ChipGroup({ group, selected, onToggle }: { group: FilterGroup; selected
           );
         })}
         {overflow && (expanded || hidden > 0) ? (
-          <button type="button" className={styles.chipMore} aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+          <button
+            type="button"
+            className={styles.chipMore}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            data-tip={expanded ? `Goes back to the first ${CHIPS_SHOWN} values and any you picked.` : "Shows every value in this row, not just the first few."}
+          >
             {expanded ? "Show fewer" : `${hidden} more`}
           </button>
         ) : null}
@@ -326,7 +355,7 @@ export function FilterBar({
           {resultText}
         </span>
         {active > 0 ? (
-          <Button variant="ghost" size="sm" onClick={() => onChange({})}>
+          <Button variant="ghost" size="sm" onClick={() => onChange({})} tip="Removes every filter and shows the full list again.">
             Clear all filters ({active})
           </Button>
         ) : null}
@@ -456,7 +485,12 @@ export function DataTable<T>({
                     aria-sort={active ? (effective.dir === "asc" ? "ascending" : "descending") : undefined}
                   >
                     {c.sort ? (
-                      <button type="button" className={cx(styles.sortButton, active && styles.sortButtonOn)} onClick={() => onSort(c)}>
+                      <button
+                        type="button"
+                        className={cx(styles.sortButton, active && styles.sortButtonOn)}
+                        onClick={() => onSort(c)}
+                        data-tip={`Sorts by ${c.header.toLowerCase()}; click again to reverse, a third time to reset.`}
+                      >
                         <span>{c.header}</span>
                         <SortIcon dir={active ? effective.dir : null} />
                       </button>
@@ -509,13 +543,25 @@ export function DataTable<T>({
             {view.from} to {view.to} of {formatNumber(view.total)} {noun}
           </span>
           <div className={styles.pagerButtons}>
-            <Button variant="secondary" size="sm" disabled={view.page === 0} onClick={() => goTo(view.page - 1)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={view.page === 0}
+              onClick={() => goTo(view.page - 1)}
+              tip={view.page === 0 ? "You are on the first page already." : `Shows the previous ${PAGE_SIZE} ${noun}.`}
+            >
               Previous
             </Button>
             <span className={cx(styles.pagerPage, "num")}>
               {view.page + 1} / {view.pageCount}
             </span>
-            <Button variant="secondary" size="sm" disabled={view.page >= view.pageCount - 1} onClick={() => goTo(view.page + 1)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={view.page >= view.pageCount - 1}
+              onClick={() => goTo(view.page + 1)}
+              tip={view.page >= view.pageCount - 1 ? "You are on the last page already." : `Shows the next ${PAGE_SIZE} ${noun}.`}
+            >
               Next
             </Button>
           </div>
@@ -842,11 +888,11 @@ export function BarChart({ data, label, height = 180, formatTick, formatValue, n
 
 /* ============================================================== Work view */
 
-const TABS: { id: WorkTab; label: string; short?: string }[] = [
-  { id: "jira", label: "Jira" },
-  { id: "prs", label: "Pull requests", short: "PRs" },
-  { id: "ci", label: "CI" },
-  { id: "time", label: "Time" },
+const TABS: { id: WorkTab; label: string; short?: string; tip: string }[] = [
+  { id: "jira", label: "Jira", tip: "Shows your open Jira issues, most urgent first, with filters." },
+  { id: "prs", label: "Pull requests", short: "PRs", tip: "Shows open pull requests, the ones waiting on your review first." },
+  { id: "ci", label: "CI", tip: "Shows the latest default-branch CI run of every repo you pushed to." },
+  { id: "time", label: "Time", tip: "Shows Claude Code time per project and commits per day, last 30 days." },
 ];
 
 function TabBadge({ snap, tab }: { snap: SnapshotResult; tab: WorkTab }) {
@@ -916,6 +962,7 @@ export function WorkDetail(_props: DetailProps) {
               className={cx(styles.tab, selected && styles.tabOn)}
               onClick={() => setTab(t.id)}
               onKeyDown={(e) => onTabKey(e, i)}
+              data-tip={t.tip}
             >
               {t.short ? (
                 <>
@@ -980,7 +1027,7 @@ function ClearFiltersRow({ text, onClear }: { text: string; onClear: () => void 
   return (
     <span className={styles.emptyRow}>
       <span>{text}</span>
-      <Button variant="secondary" size="sm" onClick={onClear}>
+      <Button variant="secondary" size="sm" onClick={onClear} tip="Removes every filter and shows the full list again.">
         Clear all filters
       </Button>
     </span>
@@ -1005,7 +1052,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
       width: "44%",
       sort: { value: (r) => r.key, firstDir: "asc" },
       cell: (r) => (
-        <TruncText href={r.url} text={`${r.key} ${r.summary}`} className={styles.issueLink}>
+        <TruncText href={r.url} text={`${r.key} ${r.summary}`} className={styles.issueLink} tip="Opens this issue in Jira in a new tab.">
           <span className={cx(styles.issueKey, "num")}>{r.key}</span>
           {r.summary}
         </TruncText>
@@ -1049,7 +1096,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
         return (
           <span
             className={cx(styles.glyphText, styles.nowrap, level === "none" && styles.muted, tone === "danger" && styles.dangerText, tone === "warn" && styles.warnText)}
-            title={r.dueDate ? dayLabel.format(parseDay(r.dueDate)) : undefined}
+            data-tip={r.dueDate ? `Due ${dayLabel.format(parseDay(r.dueDate))}.` : undefined}
           >
             {tone ? <StatusDot tone={tone} size={9} glow={false} /> : null}
             {dueText(r.dueDate, now)}
@@ -1076,6 +1123,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
     <Stagger>
       <StaggerItem>
         <Panel title="Jira issues" {...status} hint={hint} meta={issues.length > 0 ? `${issues.length} open` : undefined} skeleton="rows">
+          <div className={styles.filtered}>
           <FilterBar
             groups={groups}
             filters={filters}
@@ -1099,6 +1147,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
             }}
             empty={<ClearFiltersRow text="No issues match these filters." onClear={() => setFilters({})} />}
           />
+          </div>
         </Panel>
       </StaggerItem>
     </Stagger>
@@ -1158,7 +1207,7 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
             {repoName(r.repo)} #{r.number}
             {r.isDraft ? <span className={styles.draftTag}>Draft</span> : null}
           </span>
-          <TruncText href={r.url} text={r.title} className={styles.prTitle} />
+          <TruncText href={r.url} text={r.title} className={styles.prTitle} tip="Opens this pull request on GitHub in a new tab." />
         </span>
       ),
     },
@@ -1203,7 +1252,7 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
       align: "end",
       sort: { value: (r) => hoursSince(r.createdAt, now), firstDir: "desc" },
       cell: (r) => (
-        <span className="num" title={`Opened ${relativeTime(r.createdAt, now)}`}>
+        <span className="num" data-tip={`Opened ${relativeTime(r.createdAt, now)}.`}>
           {formatAge(r.createdAt, now)}
         </span>
       ),
@@ -1224,6 +1273,7 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
           meta={prs.length > 0 ? `${prs.length} open${waiting > 0 ? `, ${waiting} waiting on you` : ""}` : undefined}
           skeleton="rows"
         >
+          <div className={styles.filtered}>
           <FilterBar
             groups={groups}
             filters={filters}
@@ -1246,6 +1296,7 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
             }}
             empty={<ClearFiltersRow text="No pull requests match these filters." onClear={() => setFilters({})} />}
           />
+          </div>
         </Panel>
       </StaggerItem>
     </Stagger>
@@ -1316,7 +1367,13 @@ function CiTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
                   </p>
                   <p className={styles.ciLine}>
                     <span className={cx(styles.muted, "num")}>{relativeTime(r.at, now)}</span>
-                    <a className={styles.ciLink} href={r.url} target="_blank" rel="noopener noreferrer">
+                    <a
+                      className={styles.ciLink}
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-tip="Opens this run's log on GitHub in a new tab."
+                    >
                       Open run
                       <span className="sr-only"> for {repoName(r.repo)} (opens in a new tab)</span>
                       <ExternalIcon />
@@ -1349,7 +1406,7 @@ function TimeTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   });
 
   return (
-    <Stagger className={styles.stack}>
+    <Stagger className={cx(styles.stack, styles.timeGrid)}>
       <StaggerItem>
         <Panel title="Time by project, last 30 days" {...timeStatus} skeleton="chart">
           {snap.data ? <ProjectTime data={snap.data} now={now} /> : null}
@@ -1444,6 +1501,7 @@ function ProjectTime({ data, now }: { data: Snapshot; now: Date }) {
               onMouseLeave={() => setHovered(null)}
               onFocus={() => setHovered(i)}
               onBlur={() => setHovered(null)}
+              data-tip={pinned === i ? "Unpins this project so every layer shows evenly again." : "Pins this project's layer in the chart; select it again to unpin."}
             >
               <span className={styles.swatch} style={{ background: color(i) }} />
               <span className={styles.legendName}>{k}</span>

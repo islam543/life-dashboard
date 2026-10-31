@@ -108,10 +108,23 @@ export function DeleteProjectDialog({ open, project, noteCount, busy, error, onC
           ) : null}
         </div>
         <footer className={styles.foot}>
-          <Button ref={keepRef} variant="secondary" onClick={onCancel} disabled={busy}>
+          <Button
+            ref={keepRef}
+            variant="secondary"
+            onClick={onCancel}
+            disabled={busy}
+            tip={busy ? "Works again only if the delete fails, since it is already saving." : "Closes this and changes nothing; Esc does the same."}
+          >
             Keep project
           </Button>
-          <Button variant="secondary" className={partStyles.dangerSolid} onClick={onConfirm} loading={busy} loadingLabel="Deleting">
+          <Button
+            variant="secondary"
+            className={partStyles.dangerSolid}
+            onClick={onConfirm}
+            loading={busy}
+            loadingLabel="Deleting"
+            tip="Deletes the project now; its tasks and goals can't be restored."
+          >
             Delete project
           </Button>
         </footer>

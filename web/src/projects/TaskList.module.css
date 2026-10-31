@@ -312,6 +312,14 @@
   height: 14px;
 }
 
+/* ---------- Ultrawide (21:9) ----------
+   The tasks column can be wider than a comfortable line: task text wraps at 75 characters. */
+@media (min-width: 1920px) {
+  .text {
+    max-width: 75ch;
+  }
+}
+
 /* ---------- Narrow ---------- */
 
 @media (max-width: 560px) {

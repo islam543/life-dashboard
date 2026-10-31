@@ -163,6 +163,14 @@ a.trunc:hover {
   }
 }
 
+/* Hover help riding under the full text when a cut link shows its own tooltip. */
+.tooltipNote {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
 /* --------------------------------------------------------------- filters */
 
 .filterBar {
@@ -908,6 +916,45 @@ a.trunc:hover {
 
 .ciLink:hover {
   text-decoration: underline;
+}
+
+/* ------------------------------------------------------------ ultrawide */
+
+/* Filter bar and table: one stack below 1920px (the wrapper steps aside). */
+.filtered {
+  display: contents;
+}
+
+/* Ultrawide: the overlay spans the screen, so the filters become a rail beside the table and the two
+   time charts sit side by side instead of stacking down a short screen. */
+@media (min-width: 1920px) {
+  .filtered {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 4fr);
+    align-items: start;
+    gap: var(--space-6);
+  }
+
+  .filtered .filterBar {
+    margin-bottom: 0;
+    padding-right: var(--space-6);
+    border-right: var(--hairline) solid var(--divider);
+  }
+
+  .filtered .chipGroup {
+    flex-direction: column;
+    gap: var(--space-1-5);
+  }
+
+  .filtered .chipLabel {
+    width: auto;
+    padding-top: 0;
+  }
+
+  .timeGrid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
 }
 
 /* ------------------------------------------------------------ responsive */

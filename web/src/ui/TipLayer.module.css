@@ -1,0 +1,57 @@
+/* Hover help bubble (ui/TipLayer.tsx). Same raised surface as the other overlays. Tokens only. */
+
+.tip {
+  position: fixed;
+  /* Undo the browser's popover defaults (centred, inset 0, Canvas colors). */
+  inset: auto;
+  margin: 0;
+  overflow: visible;
+  z-index: var(--z-tooltip);
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-raised);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  line-height: var(--lh-snug);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  animation: tip-in var(--dur-fast) var(--ease-out) both;
+}
+
+.tip[data-side="above"] {
+  animation-name: tip-in-above;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tip-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip {
+    animation: none;
+  }
+}

@@ -52,6 +52,11 @@ export const NoteList = forwardRef<HTMLUListElement, NoteListProps>(function Not
               href={noteHash(note.path)}
               aria-current={open ? "page" : undefined}
               data-path={note.path}
+              data-tip={
+                open
+                  ? "Already open in the editor; changes save as you type."
+                  : "Opens this note in the editor; the note open now saves first."
+              }
             >
               <span className={styles.head}>
                 <span className={styles.title} dir="auto">

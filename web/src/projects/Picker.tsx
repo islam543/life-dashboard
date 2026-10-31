@@ -37,6 +37,8 @@ export interface PickerProps {
   disabled?: boolean;
   loading?: boolean;
   className?: string;
+  /** Hover help on the trigger: what picking does (and, when disabled, why). */
+  tip?: string;
 }
 
 const VIEWPORT_MARGIN = 12;
@@ -54,6 +56,7 @@ export function Picker({
   disabled,
   loading,
   className,
+  tip,
 }: PickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -149,6 +152,8 @@ export function Picker({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        // While the list is open the tip would cover it.
+        tip={open ? undefined : tip}
         onClick={() => (open ? close(false) : setOpen(true))}
       >
         {label}

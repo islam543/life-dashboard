@@ -36,6 +36,14 @@
   grid-area: agenda;
 }
 
+/* Ultrawide: all three side by side, so the agenda is not pushed below a short screen. */
+@media (min-width: 1920px) {
+  .grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-areas: "cycle streak agenda";
+  }
+}
+
 /* ------------------------------------------------------------------ cycle */
 
 .cycle {

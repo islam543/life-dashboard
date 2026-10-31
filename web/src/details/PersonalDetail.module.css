@@ -117,6 +117,18 @@
   min-width: 0;
 }
 
+/* Ultrawide: charts on the left half, the check-in log beside them, so the log no longer sits below
+   the fold of a short screen. */
+@media (min-width: 1920px) {
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-areas:
+      "trends trends log log"
+      "a      b      log log";
+    align-items: start;
+  }
+}
+
 /* --------------------------------------------------------------- trends */
 
 .trends {

@@ -31,9 +31,11 @@ import { areaLabel, detailTitle } from "../lib/format";
 import {
   buildLifeGraph,
   createSimulation,
+  FIT_EXTENT,
   fitTransform,
   graphSignature,
   nodeScale,
+  orientationFor,
   placeLabels,
   runToEnd,
   seedLayout,
@@ -50,6 +52,7 @@ import {
   type SimLink,
   type SimNode,
 } from "../lib/lifeGraph";
+import { ULTRAWIDE_QUERY, useMediaQuery } from "../notes/useMediaQuery";
 import { Button } from "../ui/Button";
 import { Panel, panelFromSource } from "../ui/Panel";
 import { Skeleton } from "../ui/Skeleton";
@@ -64,6 +67,10 @@ import styles from "./LifeMap.module.css";
 // The layout is deterministic, so a copy is run to the end off screen first to frame the view, then the
 // visible simulation blooms into exactly that place and stops (about 2 s). Under reduced motion the
 // settled layout is shown at once. Node clicks call openDetail(area) with no layoutId (plain fade).
+//
+// Ultrawide (1920px and up): the area readout and the legend become a rail on the left, the stage fills
+// the rest of the width and the window's height (no page scroll), and on a stage at least twice as wide as
+// tall the layout switches to "wide", which spreads the areas sideways (lib/lifeGraph orientationFor).
 
 const LABEL_ALPHA = 0.12; // labels fade in once the bloom is mostly done
 const ZOOM_STEP = 1.4;
@@ -106,6 +113,31 @@ function useElementSize(ref: RefObject<HTMLElement | null>): { width: number; he
     return () => observer.disconnect();
   }, [ref]);
   return size;
+}
+
+/**
+ * The element's distance from the top of the page, as a `--map-top` style. Ultrawide CSS sizes the stage
+ * to the rest of the window from it, whatever the header's height.
+ */
+function useTopStyle(ref: RefObject<HTMLElement | null>): CSSProperties | undefined {
+  const [top, setTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (!el) return;
+      const next = Math.round(el.getBoundingClientRect().top + window.scrollY);
+      setTop((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [ref]);
+  return top === null ? undefined : ({ "--map-top": `${top}px` } as CSSProperties);
 }
 
 type LabelFont = "area" | "node";
@@ -232,8 +264,10 @@ export function LifeMap() {
 }
 
 function MapSkeleton() {
+  const ref = useRef<HTMLDivElement>(null);
+  const top = useTopStyle(ref);
   return (
-    <div className={styles.skeleton} aria-hidden="true">
+    <div ref={ref} className={styles.skeleton} style={top} aria-hidden="true">
       <div className={styles.skeletonReadout}>
         {Array.from({ length: 5 }, (_, i) => (
           <div key={i} className={styles.skeletonCell}>
@@ -253,12 +287,14 @@ function MapBody({ data }: { data: Snapshot }) {
   const reduced = useReducedMotion();
   // Rebuilt when a new snapshot arrives; the layout only re-runs when what it draws changes.
   const graph = useMemo(() => buildLifeGraph(data, new Date()), [data]);
+  const ref = useRef<HTMLDivElement>(null);
+  const top = useTopStyle(ref);
   return (
-    <>
+    <div ref={ref} className={styles.layout} style={top}>
       <AreaReadout areas={graph.areas} />
       <MapStage graph={graph} reduced={reduced} />
       <HiddenList graph={graph} />
-    </>
+    </div>
   );
 }
 
@@ -353,8 +389,10 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
   const reducedRef = useLatest(reduced);
   const graphRef = useLatest(graph);
   const measure = useTextMeasure();
+  const ultrawide = useMediaQuery(ULTRAWIDE_QUERY);
 
-  const orientation: Orientation = size && size.width / Math.max(1, size.height) < 0.9 ? "portrait" : "landscape";
+  const orientation: Orientation = size ? orientationFor(size.width, size.height, ultrawide) : "landscape";
+  const orientationRef = useLatest(orientation);
   const signature = useMemo(() => graphSignature(graph), [graph]);
   const idsKey = useMemo(() => graph.nodes.map((n) => n.id).join("|"), [graph]);
   const nodeById = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
@@ -390,7 +428,8 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
       const narrow = s.width < 560;
       const side = narrow ? 16 : 56;
       const pad = { top: 56, right: side, bottom: narrow ? 20 : 28, left: side };
-      let t = fitTransform(nodes, s.width, s.height, pad);
+      const extent = FIT_EXTENT[orientationRef.current];
+      let t = fitTransform(nodes, s.width, s.height, pad, extent);
       // Keep the graph clear of the legend card when it floats in the corner (wide screens).
       const legend = legendRef.current;
       if (legend && getComputedStyle(legend).position === "absolute") {
@@ -403,14 +442,14 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
           });
         if (overlaps(t)) {
           // Make room beside the legend or above it, whichever keeps the map bigger.
-          const beside = fitTransform(nodes, s.width, s.height, { ...pad, left: Math.max(pad.left, right + 8) });
-          const above = fitTransform(nodes, s.width, s.height, { ...pad, bottom: s.height - top + 4 });
+          const beside = fitTransform(nodes, s.width, s.height, { ...pad, left: Math.max(pad.left, right + 8) }, extent);
+          const above = fitTransform(nodes, s.width, s.height, { ...pad, bottom: s.height - top + 4 }, extent);
           t = beside.k >= above.k ? beside : above;
         }
       }
       return zoomIdentity.translate(t.x, t.y).scale(t.k);
     },
-    [sizeRef],
+    [sizeRef, orientationRef],
   );
 
   const applyView = useCallback(
@@ -803,6 +842,8 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
     tipStyle = { left, top };
   }
 
+  const minZoom = k <= ZOOM_EXTENT[0] + 0.001;
+  const maxZoom = k >= ZOOM_EXTENT[1] - 0.001;
   const center = screen("center");
   const noProjects = !graph.nodes.some((n) => n.kind === "project" || n.kind === "other");
   const workArea = graph.areas.find((a) => a.area === "work");
@@ -812,23 +853,43 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
       <div ref={stageRef} className={styles.stage} data-ready={ready || undefined}>
         {/* Controls come first in the DOM so Tab reaches them before the graph's many nodes. */}
         <div ref={controlsRef} className={styles.controls} role="group" aria-label="Map view">
+          {/* aria-disabled, not disabled: the button stays hoverable and focusable so its tip can say why. */}
           <Button
             size="sm"
             icon={<MinusIcon />}
             aria-label="Zoom out"
-            title="Zoom out"
-            disabled={k <= ZOOM_EXTENT[0] + 0.001}
-            onClick={() => zoomBy(1 / ZOOM_STEP)}
+            aria-disabled={minZoom || undefined}
+            className={minZoom ? styles.inactive : undefined}
+            tip={
+              minZoom
+                ? "Does nothing now because the map is at its widest view; zoom in or use Reset view."
+                : "Zooms out to show more of the map; scrolling over the map does the same."
+            }
+            onClick={() => {
+              if (!minZoom) zoomBy(1 / ZOOM_STEP);
+            }}
           />
           <Button
             size="sm"
             icon={<PlusIcon />}
             aria-label="Zoom in"
-            title="Zoom in"
-            disabled={k >= ZOOM_EXTENT[1] - 0.001}
-            onClick={() => zoomBy(ZOOM_STEP)}
+            aria-disabled={maxZoom || undefined}
+            className={maxZoom ? styles.inactive : undefined}
+            tip={
+              maxZoom
+                ? "Does nothing now because the map is at its closest view; zoom out or use Reset view."
+                : "Zooms in to spread nodes apart; labels keep their size."
+            }
+            onClick={() => {
+              if (!maxZoom) zoomBy(ZOOM_STEP);
+            }}
           />
-          <Button size="sm" icon={<RecenterIcon />} onClick={resetView} title="Fit the whole map and put moved nodes back">
+          <Button
+            size="sm"
+            icon={<RecenterIcon />}
+            onClick={resetView}
+            tip="Fits the whole map in view and puts nodes you dragged back in place."
+          >
             Reset view
           </Button>
         </div>

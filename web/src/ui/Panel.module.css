@@ -126,6 +126,23 @@
   flex-direction: column;
 }
 
+/* fit (ultrawide only): fill the parent's height; the body scrolls, the header stays put. The body is
+   pushed out by one space step and padded back in, so focus rings and hover lifts are not clipped. */
+@media (min-width: 1920px) {
+  .fit {
+    min-height: 0;
+  }
+
+  .fit .body {
+    min-height: 0;
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}
+
 .problem {
   display: grid;
   justify-items: start;

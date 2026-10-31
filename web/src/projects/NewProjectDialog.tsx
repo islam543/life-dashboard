@@ -32,6 +32,13 @@ import styles from "./Dialog.module.css";
 const NEW_STATUSES: readonly ProjectStatus[] = ["active", "idea", "paused"];
 const SEARCH_FROM = 7;
 
+/** Hover help on each status choice: where the project lands. */
+const STATUS_TIP: Partial<Record<ProjectStatus, string>> = {
+  active: "Starts it under Active; only Active projects show in Needs you.",
+  idea: "Parks it under Ideas until you set it to Active on its page.",
+  paused: "Files it under Paused, out of Needs you until you set it to Active.",
+};
+
 export interface NewProjectDialogProps {
   open: boolean;
   store: ProjectsStore;
@@ -158,7 +165,16 @@ function NewProjectForm({
         <h2 id="new-project-title" className={styles.title}>
           New project
         </h2>
-        <Button variant="ghost" size="sm" icon={<CloseIcon />} className={styles.close} aria-label="Close without saving" onClick={onClose} disabled={saving} />
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<CloseIcon />}
+          className={styles.close}
+          aria-label="Close without saving"
+          onClick={onClose}
+          disabled={saving}
+          tip={saving ? "Works again if creating the project fails." : "Closes the form and discards what you typed."}
+        />
       </header>
 
       <div className={styles.body}>
@@ -174,7 +190,13 @@ function NewProjectForm({
                   <strong>Fix {errorList.length === 1 ? "this" : "these"} to create the project:</strong>
                 </p>
                 {errorList.map(([field, message]) => (
-                  <button key={field} type="button" className={styles.summaryLink} onClick={() => document.getElementById(id(field))?.focus()}>
+                  <button
+                    key={field}
+                    type="button"
+                    className={styles.summaryLink}
+                    onClick={() => document.getElementById(id(field))?.focus()}
+                    data-tip="Moves to the field with this problem so you can fix it."
+                  >
                     {message}
                   </button>
                 ))}
@@ -215,7 +237,7 @@ function NewProjectForm({
             <legend className={styles.label}>Area</legend>
             <div className={styles.choices}>
               {AREA_ORDER.map((a) => (
-                <label key={a} className={styles.choice}>
+                <label key={a} className={styles.choice} data-tip={`Files it under ${AREA_LABEL[a]}, for the board's Area filter and the life map.`}>
                   <input type="radio" name={id("area")} value={a} checked={values.area === a} onChange={() => update({ area: a as ProjectArea })} />
                   <span>{AREA_LABEL[a]}</span>
                 </label>
@@ -226,7 +248,7 @@ function NewProjectForm({
             <legend className={styles.label}>Status</legend>
             <div className={styles.choices}>
               {NEW_STATUSES.map((s) => (
-                <label key={s} className={styles.choice}>
+                <label key={s} className={styles.choice} data-tip={STATUS_TIP[s]}>
                   <input type="radio" name={id("status")} value={s} checked={values.status === s} onChange={() => update({ status: s })} />
                   <span>{STATUS_LABEL[s]}</span>
                 </label>
@@ -317,7 +339,12 @@ function NewProjectForm({
                   return (
                     <li key={`${d.kind}:${d.name}`} className={styles.sourceItem}>
                       <label>
-                        <input type="checkbox" checked={checked} onChange={(e) => toggleSource(d, e.target.checked)} />
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => toggleSource(d, e.target.checked)}
+                          data-tip="Folds this name in, so its time and commits count toward the new project."
+                        />
                         <KindIcon kind={d.kind} />
                         <span className={styles.sourceName} dir="auto" title={d.name}>
                           {displayName(d.name)}
@@ -341,10 +368,21 @@ function NewProjectForm({
             </>
           ) : null}
         </p>
-        <Button variant="secondary" onClick={onClose} disabled={saving}>
+        <Button
+          variant="secondary"
+          onClick={onClose}
+          disabled={saving}
+          tip={saving ? "Works again if creating the project fails." : "Closes the form without creating a project."}
+        >
           Cancel
         </Button>
-        <Button type="submit" variant="primary" loading={saving} loadingLabel="Creating">
+        <Button
+          type="submit"
+          variant="primary"
+          loading={saving}
+          loadingLabel="Creating"
+          tip="Creates the project and opens its page, ready for its first task."
+        >
           Create project
         </Button>
       </footer>

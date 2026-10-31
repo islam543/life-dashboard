@@ -24,6 +24,9 @@ import styles from "./UntrackedTray.module.css";
 
 const FIRST_ROWS = 12;
 
+/** Hover help on a row's other buttons while one action on that name is saving. */
+const BUSY_TIP = "Works again once the current change to this name is saved.";
+
 export interface UntrackedTrayProps {
   store: ProjectsStore;
   status: PanelStatus;
@@ -47,6 +50,7 @@ export function UntrackedTray({ store, status, onTracked }: UntrackedTrayProps) 
       skeleton="rows"
       meta={state ? String(count) : undefined}
       className={styles.panel}
+      bodyClassName={styles.scroll}
     >
       {state ? <TrayBody store={store} state={state} onTracked={onTracked} /> : null}
     </Panel>
@@ -179,7 +183,14 @@ function TrayBody({ store, state, onTracked }: { store: ProjectsStore; state: Pr
             </AnimatePresence>
           </ul>
           {items.length > FIRST_ROWS ? (
-            <Button variant="ghost" size="sm" className={styles.more} onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.more}
+              onClick={() => setShowAll((v) => !v)}
+              aria-expanded={showAll}
+              tip={showAll ? `Shows only the first ${FIRST_ROWS} names again.` : `Lists every untracked name, not just the first ${FIRST_ROWS}.`}
+            >
               {showAll ? "Show fewer" : `Show all ${items.length}`}
             </Button>
           ) : null}
@@ -233,7 +244,11 @@ function UntrackedRow({
           loading={busy === "hide"}
           disabled={!!busy && busy !== "hide"}
           aria-label={`Hide ${name} from projects and charts`}
-          title="Hide from projects and charts"
+          tip={
+            busy && busy !== "hide"
+              ? BUSY_TIP
+              : "Hides this name from Untracked, the time bars and the life map; Unhide brings it back."
+          }
         />
       </div>
       <p className={styles.facts}>
@@ -241,7 +256,17 @@ function UntrackedRow({
         {item.lastSeen ? <span className={styles.seen}>, last seen {seenText(item.lastSeen, new Date())}</span> : null}
       </p>
       <div className={styles.actions}>
-        <Button size="sm" icon={<TrackIcon />} data-part="track" onClick={onTrack} loading={busy === "track"} loadingLabel="Tracking" disabled={!!busy && busy !== "track"} aria-label={`Track ${name} as a new project`}>
+        <Button
+          size="sm"
+          icon={<TrackIcon />}
+          data-part="track"
+          onClick={onTrack}
+          loading={busy === "track"}
+          loadingLabel="Tracking"
+          disabled={!!busy && busy !== "track"}
+          aria-label={`Track ${name} as a new project`}
+          tip={busy && busy !== "track" ? BUSY_TIP : "Creates an active Work project from this name; rename or move it later on its page."}
+        >
           Track
         </Button>
         <Picker
@@ -249,6 +274,7 @@ function UntrackedRow({
           ariaLabel={`Add to project: ${name}`}
           icon={<FoldIcon />}
           searchLabel="Find a project"
+          tip={busy && busy !== "add" ? BUSY_TIP : "Adds this name as a source of a project you already have, so its activity counts there."}
           options={options}
           empty="No projects yet. Use Track to start one."
           onPick={(id) => {
@@ -270,7 +296,14 @@ function HiddenList({ names, onUnhide }: { names: readonly string[]; onUnhide: (
   const sorted = [...names].sort((a, b) => displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" }));
   return (
     <div className={styles.hidden}>
-      <button type="button" className={styles.hiddenToggle} aria-expanded={open} aria-controls={listId} onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className={styles.hiddenToggle}
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((v) => !v)}
+        data-tip={open ? "Hides the list of hidden names." : "Shows the names you hid, each with an Unhide button."}
+      >
         <span className={styles.chevron} data-open={open || undefined}>
           <ChevronIcon />
         </span>
@@ -287,6 +320,7 @@ function HiddenList({ names, onUnhide }: { names: readonly string[]; onUnhide: (
               variant="ghost"
               data-part="unhide"
               aria-label={`Unhide ${displayName(n)}`}
+              tip="Returns this name to Untracked and the charts if it was active in the last 90 days."
               onClick={(e) => {
                 // The row leaves (and the whole list when it was the last one): keep focus nearby.
                 const row = e.currentTarget.closest("li");

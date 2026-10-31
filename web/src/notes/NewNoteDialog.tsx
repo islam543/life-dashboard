@@ -13,6 +13,13 @@ import styles from "./NewNoteDialog.module.css";
 // yourself. Enter creates; Escape or Cancel closes. The server writes the file with the template's
 // headings and the editor opens with the caret under the first heading.
 
+/** Hover help for each template: what the new file starts with. */
+const TEMPLATE_TIPS: Record<NoteTemplate, string> = {
+  meeting: "Starts with five meeting headings and an empty task under Action items.",
+  personal: "Starts with a single Notes heading, with the caret under it.",
+  blank: "Starts with an empty page and no headings.",
+};
+
 export interface NewNoteDialogProps {
   open: boolean;
   sections: NoteSection[];
@@ -109,6 +116,7 @@ export function NewNoteDialog({ open, sections, initialSection, onCancel, onCrea
             onClick={onCancel}
             disabled={busy}
             className={styles.close}
+            tip="Closes the form without creating a note; Esc does the same."
           />
         </div>
 
@@ -145,6 +153,7 @@ export function NewNoteDialog({ open, sections, initialSection, onCancel, onCrea
             id={ids.section}
             className={styles.input}
             value={section}
+            data-tip="Picks the section folder for the note; the template follows it until you pick one."
             onChange={(e) => {
               const next = e.target.value;
               setSection(next);
@@ -163,7 +172,7 @@ export function NewNoteDialog({ open, sections, initialSection, onCancel, onCrea
           <legend className={styles.label}>Template</legend>
           <div className={styles.templates}>
             {TEMPLATES.map((t) => (
-              <label key={t.id} className={styles.template}>
+              <label key={t.id} className={styles.template} data-tip={TEMPLATE_TIPS[t.id]}>
                 <input
                   type="radio"
                   name={ids.template}
@@ -189,10 +198,16 @@ export function NewNoteDialog({ open, sections, initialSection, onCancel, onCrea
         ) : null}
 
         <div className={styles.actions}>
-          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+          <Button variant="ghost" onClick={onCancel} disabled={busy} tip="Closes the form; no note is created.">
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={busy} loadingLabel="Creating">
+          <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            loadingLabel="Creating"
+            tip="Writes the markdown file in the chosen section and opens it, ready to type."
+          >
             Create note
           </Button>
         </div>

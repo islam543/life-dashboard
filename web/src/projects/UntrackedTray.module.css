@@ -177,3 +177,24 @@
   font-size: var(--fs-xs);
   line-height: var(--lh-snug);
 }
+
+/* ---------- Ultrawide (21:9) ----------
+   The tray is a full-height column beside the board lanes; its list scrolls inside the panel. The
+   padding (taken back by the margin) keeps focus rings at the edges from being clipped. */
+@media (min-width: 1920px) {
+  .panel {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Positioned so absolutely placed children (screen-reader text) scroll and clip with it too. */
+  .scroll {
+    position: relative;
+    min-height: 0;
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}

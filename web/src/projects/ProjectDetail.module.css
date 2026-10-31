@@ -428,6 +428,97 @@
   }
 }
 
+/* ---------- Ultrawide (21:9) ----------
+   The project fills the window below the header (--fit-height, from Projects.module.css) in three
+   columns, each scrolling inside itself instead of the page:
+     overview (hero) and goals | tasks | time, notes and sources
+   .columns and .main step aside (display: contents) so their panels sit in this grid directly; the
+   markup is the same as below 1920px. Row 2 is the hero at its own height (it scrolls inside only
+   if it would leave goals less than a minimum); row 3 is what is left, for goals. */
+@media (min-width: 1920px) {
+  .wide {
+    height: var(--fit-height);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, max-content) minmax(calc(var(--space-12) * 4), 1fr);
+    align-items: stretch;
+  }
+
+  .wide .back {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .wide .notice {
+    grid-column: 2 / -1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .wide .hero {
+    display: flex;
+    flex-direction: column;
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+  }
+
+  /* Padding taken back by the margin keeps focus rings at the edges from being clipped. */
+  .wide .heroInner {
+    position: relative; /* absolutely placed children (screen-reader text) scroll and clip with it */
+    flex: 1;
+    min-height: 0;
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .wide .columns,
+  .wide .main {
+    display: contents;
+  }
+
+  .goalsPanel {
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 0;
+  }
+
+  .tasksPanel {
+    grid-column: 2;
+    grid-row: 2 / -1;
+    min-height: 0;
+  }
+
+  .wide .side {
+    position: relative;
+    grid-column: 3;
+    grid-row: 2 / -1;
+    align-content: start;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .scrollBody {
+    position: relative;
+    min-height: 0;
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  /* Goals can be 200 characters: keep the line readable in a wide column. */
+  .goalText {
+    max-width: 75ch;
+  }
+}
+
 @media (max-width: 720px) {
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

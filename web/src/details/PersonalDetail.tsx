@@ -398,7 +398,13 @@ function CheckinTable({ checkins, onEdit, today }: { checkins: Checkin[]; onEdit
       width: "10%",
       align: "end",
       cell: (r) => (
-        <Button variant="ghost" size="sm" onClick={() => onEdit(r.date)} className={styles.editButton}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(r.date)}
+          className={styles.editButton}
+          tip="Opens this day's check-in to change it; saving replaces the old answers."
+        >
           Edit<span className="sr-only"> check-in for {weekdayLabel.format(parseDay(r.date))}</span>
         </Button>
       ),
@@ -451,7 +457,14 @@ export function PersonalDetail(_props: DetailProps) {
       <div className={styles.toolbar}>
         <div className={styles.range} role="group" aria-label="Time range">
           {([30, 90] as const).map((r) => (
-            <button key={r} type="button" className={cx(styles.rangeButton, range === r && styles.rangeOn)} aria-pressed={range === r} onClick={() => setRange(r)}>
+            <button
+              key={r}
+              type="button"
+              className={cx(styles.rangeButton, range === r && styles.rangeOn)}
+              aria-pressed={range === r}
+              onClick={() => setRange(r)}
+              data-tip={`Shows the last ${r} days in the charts above the log.`}
+            >
               {range === r ? <motion.span layoutId="personal-range" className={styles.rangeThumb} transition={{ duration: MOTION.base, ease: MOTION.easeOut }} /> : null}
               <span className={styles.rangeText}>{r} days</span>
             </button>
@@ -465,7 +478,12 @@ export function PersonalDetail(_props: DetailProps) {
                   <StatusDot tone="ok" size={9} />
                   Checked in today
                 </span>
-                <Button variant="secondary" size="sm" onClick={() => openCheckin(today)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openCheckin(today)}
+                  tip="Opens today's saved check-in to change it; saving again replaces it."
+                >
                   Edit today
                 </Button>
               </>
@@ -475,7 +493,11 @@ export function PersonalDetail(_props: DetailProps) {
                   <StatusDot tone="idle" size={10} glow={false} />
                   {latest ? `No check-in today. Last one ${lastSeen(latest.date, now)}.` : "No check-in today."}
                 </span>
-                <Button variant="primary" onClick={() => openCheckin()}>
+                <Button
+                  variant="primary"
+                  onClick={() => openCheckin()}
+                  tip="Logs today's sleep, energy, mood, workout and spend in about 30 seconds."
+                >
                   Check in now
                 </Button>
               </>

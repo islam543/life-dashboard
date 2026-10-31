@@ -23,6 +23,9 @@ Open backlog = files at this level. Finished tickets move to `done/`. Plan: `../
 | T17 | Server notes store in the vault | backend-developer | T15 | 6 | done |
 | T18 | Projects view and registry-aware charts | frontend-developer | T15 | 6 | done |
 | T19 | Notes view | frontend-developer | T15 | 6 | done |
+| T20 | Ultrawide Home, shell, details, hover help | frontend-developer | foundation | 7 | done |
+| T21 | Ultrawide Projects, hover help | frontend-developer | foundation | 7 | done |
+| T22 | Ultrawide Notes and Life map, hover help | frontend-developer | foundation | 7 | done |
 
 ## Assumptions taken (say if any is wrong)
 

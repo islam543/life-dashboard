@@ -581,3 +581,39 @@
     display: none;
   }
 }
+
+/* Ultrawide (1920px and up): no tabs. NoteEditor renders the editor and a live Preview panel side by
+   side. Each text column stays at 75 characters or less and sits centred in its panel (like Obsidian's
+   readable line length), so the extra width becomes a second column instead of longer lines. */
+@media (min-width: 1920px) {
+  .editor[data-split] {
+    width: 100%;
+    max-inline-size: calc(75ch + 2 * var(--space-4) + 2 * var(--hairline));
+    margin-inline: auto;
+  }
+
+  .tabsRow[data-split] {
+    justify-content: flex-end;
+  }
+
+  .livePreviewBody {
+    min-height: 0;
+  }
+
+  /* Scrolls inside the panel; the side padding keeps the focus ring and task boxes from being clipped. */
+  .livePreview {
+    flex: 1;
+    min-height: 0;
+    margin: 0 calc(-1 * var(--space-2));
+    padding: var(--space-1) var(--space-2) var(--space-4);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--radius-sm);
+  }
+
+  .livePreview:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+}

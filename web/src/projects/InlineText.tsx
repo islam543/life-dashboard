@@ -30,6 +30,8 @@ export interface InlineTextProps {
   id?: string;
   /** Hide the pencil until the row is hovered or focused (dense lists); it stays reachable by Tab. */
   quietButton?: boolean;
+  /** Hover help on the pencil. Defaults to how editing works (which key saves, Esc cancels). */
+  tip?: string;
 }
 
 export function InlineText({
@@ -45,6 +47,7 @@ export function InlineText({
   className,
   id,
   quietButton = false,
+  tip,
 }: InlineTextProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -170,7 +173,16 @@ export function InlineText({
       <Tag id={id} className={[className, empty ? styles.empty : ""].filter(Boolean).join(" ")} dir="auto" onClick={start}>
         {empty ? (emptyText ?? "") : value}
       </Tag>
-      <Button ref={buttonRef} variant="ghost" size="sm" icon={<PencilIcon />} aria-label={editLabel} title={editLabel} className={styles.pencil} onClick={start} />
+      <Button
+        ref={buttonRef}
+        variant="ghost"
+        size="sm"
+        icon={<PencilIcon />}
+        aria-label={editLabel}
+        tip={tip ?? (multiline ? "Edits this text in place; Ctrl+Enter saves, Esc cancels." : "Edits this text in place; Enter saves, Esc cancels.")}
+        className={styles.pencil}
+        onClick={start}
+      />
     </span>
   );
 }

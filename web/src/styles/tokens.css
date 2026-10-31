@@ -132,7 +132,8 @@
   --target-min: 32px; /* smallest control height; WCAG 2.5.8 floor is 24px */
 
   /* Layout */
-  --page-max: 1440px;
+  --page-max: 1440px; /* widens to --page-max-wide on ultrawide screens, see the media query below :root */
+  --page-max-wide: 3440px;
   --gutter: clamp(16px, 3vw, 32px);
   --panel-pad: clamp(14px, 1.6vw, 20px);
   --grid-gap: clamp(12px, 1.4vw, 18px);
@@ -154,4 +155,86 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
   --ease-in-out: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+}
+
+/* Ultrawide (21:9, e.g. 2560x1080 and 3440x1440). The page uses the full width and views switch to
+   side-by-side layouts that fit the short height. Views use the same query: (min-width: 1920px). */
+@media (min-width: 1920px) {
+  :root {
+    --page-max: var(--page-max-wide);
+  }
+}
+
+/*
+ * Light theme: cool paper with navy ink, deeper teal accent. Same roles as the dark set, not an inversion.
+ * Contrast (against bg-app / bg-sunken / bg-surface):
+ *   text-strong 16.2 / 14.9 / 18.2   text 11.4 / 10.5 / 12.8   text-muted 6.3 / 5.8 / 7.1
+ *   text-faint 5.3 / 4.9 / 6.0       accent 5.0 / 4.6 / 5.6    danger 5.4 / 4.9 / 6.0
+ *   warn 5.7 / 5.2 / 6.4             ai 6.3 / 5.8 / 7.0        on-accent on accent 5.6
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-app: #eef2f8;
+  --bg-sunken: #e3e9f2;
+  --bg-surface: #ffffff;
+  --bg-surface-top: #f7faff;
+  --bg-raised: #ffffff;
+  --bg-hover: #e6eef9;
+  --bg-backdrop: rgba(12, 22, 44, 0.42);
+
+  --text-strong: #0a1430;
+  --text: #24324f;
+  --text-muted: #4a5875;
+  --text-faint: #56647f;
+
+  --accent: #00718a;
+  --accent-strong: #005a6e;
+  --accent-soft: rgba(0, 113, 138, 0.1);
+  --accent-line: rgba(0, 113, 138, 0.36);
+  --on-accent: #ffffff;
+
+  --danger: #b8301b;
+  --danger-soft: rgba(184, 48, 27, 0.08);
+  --danger-line: rgba(184, 48, 27, 0.36);
+  --warn: #875400;
+  --warn-soft: rgba(214, 140, 0, 0.12);
+  --warn-line: rgba(160, 100, 0, 0.4);
+
+  --ai: #5541c9;
+  --ai-soft: rgba(85, 65, 201, 0.08);
+  --ai-line: rgba(85, 65, 201, 0.34);
+
+  --border: rgba(20, 50, 100, 0.14);
+  --border-strong: rgba(20, 50, 100, 0.26);
+  --divider: rgba(20, 50, 100, 0.09);
+  --focus-ring: #00718a;
+  --grid-line: rgba(20, 60, 120, 0.05);
+  --ambient-top: rgba(0, 150, 190, 0.06);
+  --ambient-corner: rgba(60, 110, 230, 0.05);
+  --selection: rgba(0, 113, 138, 0.2);
+
+  --shadow-panel: 0 1px 2px rgba(15, 30, 60, 0.06), 0 12px 32px -20px rgba(15, 30, 60, 0.25);
+  --shadow-raised: 0 2px 6px rgba(15, 30, 60, 0.08), 0 20px 48px -16px rgba(15, 30, 60, 0.3);
+  --glow-accent: 0 0 10px rgba(0, 113, 138, 0.22);
+  --glow-danger: 0 0 10px rgba(184, 48, 27, 0.22);
+  --glow-warn: 0 0 10px rgba(214, 140, 0, 0.25);
+  --glow-ai: 0 0 10px rgba(85, 65, 201, 0.22);
+
+  --chart-area: rgba(0, 113, 138, 0.15);
+  --chart-grid: rgba(20, 50, 100, 0.1);
+  --seq-0: #e4eaf3;
+  --seq-1: #b9e3ec;
+  --seq-2: #6cc3d6;
+  --seq-3: #1f97b1;
+  --seq-4: #00647b;
+  --cat-1: #00718a;
+  --cat-2: #2f62d9;
+  --cat-3: #13896f;
+  --cat-4: #6b8fd6;
+  --cat-5: #5d6f92;
+  --cat-6: #7fc6d6;
+
+  --skeleton-base: rgba(20, 50, 100, 0.06);
+  --skeleton-shine: rgba(20, 50, 100, 0.12);
 }

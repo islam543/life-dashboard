@@ -91,7 +91,11 @@ function Agenda({ events, now }: { events: CalendarEvent[]; now: Date }) {
                   </span>
                   <span className={styles.eventMain}>
                     {live ? <span className={styles.nowTag}>Now</span> : null}
-                    {e.url ? <TruncText href={e.url} text={e.title} className={styles.eventTitle} /> : <TruncText text={e.title} className={styles.eventTitle} />}
+                    {e.url ? (
+                      <TruncText href={e.url} text={e.title} className={styles.eventTitle} tip="Opens this event in Google Calendar in a new tab." />
+                    ) : (
+                      <TruncText text={e.title} className={styles.eventTitle} />
+                    )}
                   </span>
                 </li>
               );
@@ -119,7 +123,11 @@ function EmailTable({ emails, now }: { emails: EmailItem[]; now: Date }) {
       header: "Subject",
       width: "52%",
       sort: { value: (r) => r.subject, firstDir: "asc" },
-      cell: (r) => (r.url ? <TruncText href={r.url} text={r.subject || "(no subject)"} /> : <TruncText text={r.subject || "(no subject)"} />),
+      cell: (r) => (r.url ? (
+          <TruncText href={r.url} text={r.subject || "(no subject)"} tip="Opens this email in Gmail in a new tab." />
+        ) : (
+          <TruncText text={r.subject || "(no subject)"} />
+        )),
     },
     {
       id: "received",

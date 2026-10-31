@@ -29,6 +29,10 @@ import styles from "./Board.module.css";
 // The board: what is slipping and where the week went, by project. A readout row (active, due this
 // week, open tasks, time this week), an area filter, then the projects grouped by status (Active,
 // Paused, Ideas, and Done collapsed). Each card is one link to the project, and morphs into it.
+// Ultrawide (>=1920px): the readout and the filter share one row and the status groups become lanes
+// side by side, each scrolling inside itself; empty and folded lanes stay narrow.
+
+const NEW_PROJECT_TIP = "Opens a short form for a new project: name, area, status, deadline and sources.";
 
 /** Card corner radius as a number so the shared-layout morph can correct it (same as --radius-md). */
 export const CARD_RADIUS = 10;
@@ -74,10 +78,12 @@ export function Board({ store, now, onNewProject, highlight }: BoardProps) {
       {...status}
       skeleton="cards"
       meta={store.state ? `${count} tracked` : undefined}
+      className={styles.panel}
+      bodyClassName={styles.panelBody}
       action={
         // With no projects the empty state carries the same button, so the header stays quiet.
         count > 0 ? (
-          <Button variant="primary" size="sm" icon={<PlusIcon />} onClick={onNewProject}>
+          <Button variant="primary" size="sm" icon={<PlusIcon />} onClick={onNewProject} tip={NEW_PROJECT_TIP}>
             New project
           </Button>
         ) : undefined
@@ -114,7 +120,7 @@ function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
             : "Projects add up time, tasks and deadlines across your Claude sessions and GitHub repos. Start one from scratch."
         }
         action={
-          <Button variant="primary" icon={<PlusIcon />} onClick={onNewProject}>
+          <Button variant="primary" icon={<PlusIcon />} onClick={onNewProject} tip={NEW_PROJECT_TIP}>
             New project
           </Button>
         }
@@ -125,6 +131,10 @@ function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
   const options = AREA_FILTERS.map((value) => ({
     value,
     label: `${value === "all" ? "All" : AREA_LABEL[value]} ${counts[value]}`,
+    tip:
+      value === "all"
+        ? "Shows projects in every area; this browser remembers the filter."
+        : `Shows only ${AREA_LABEL[value]} projects; the counts follow, and this browser remembers it.`,
   }));
 
   return (
@@ -136,26 +146,29 @@ function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
         </span>
         <Segmented label="Show projects in area" options={options} value={shownArea} onChange={setArea} />
       </div>
-      {shownCards.length === 0 && shownArea !== "all" ? (
-        <EmptyState
-          title={`No ${AREA_LABEL[shownArea].toLowerCase()} projects yet.`}
-          body={`Set a project's area to ${AREA_LABEL[shownArea]} on its page, or start a new one.`}
-          action={
-            <Button
-              size="sm"
-              onClick={(e) => {
-                // This button goes away with the empty state: land on the All filter instead.
-                e.currentTarget.closest("section")?.querySelector<HTMLElement>('[role="group"] button')?.focus();
-                setArea("all");
-              }}
-            >
-              Show all areas
-            </Button>
-          }
-        />
-      ) : (
-        groups.map((g) => <Group key={g.status} group={g} highlight={highlight} anyShown={shownCards.length > 0} />)
-      )}
+      <div className={styles.lanes}>
+        {shownCards.length === 0 && shownArea !== "all" ? (
+          <EmptyState
+            title={`No ${AREA_LABEL[shownArea].toLowerCase()} projects yet.`}
+            body={`Set a project's area to ${AREA_LABEL[shownArea]} on its page, or start a new one.`}
+            action={
+              <Button
+                size="sm"
+                tip="Clears the area filter so every project shows again."
+                onClick={(e) => {
+                  // This button goes away with the empty state: land on the All filter instead.
+                  e.currentTarget.closest("section")?.querySelector<HTMLElement>('[role="group"] button')?.focus();
+                  setArea("all");
+                }}
+              >
+                Show all areas
+              </Button>
+            }
+          />
+        ) : (
+          groups.map((g) => <Group key={g.status} group={g} highlight={highlight} anyShown={shownCards.length > 0} />)
+        )}
+      </div>
     </div>
   );
 }
@@ -224,7 +237,13 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
   }
 
   return (
-    <section className={styles.group} aria-labelledby={headingId} data-status={group.status}>
+    <section
+      className={styles.group}
+      aria-labelledby={headingId}
+      data-status={group.status}
+      data-empty={n === 0 || undefined}
+      data-folded={!expanded || undefined}
+    >
       <h3 id={headingId} className={styles.groupTitle}>
         {collapsible ? (
           <button
@@ -233,6 +252,7 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
             aria-expanded={expanded}
             aria-controls={listId}
             onClick={() => setOpen((v) => !v)}
+            data-tip={expanded ? "Hides the finished projects again." : "Shows the projects you marked Done."}
           >
             <span className={styles.chevron} data-open={expanded || undefined}>
               <ChevronIcon />
@@ -249,7 +269,7 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
       {n === 0 ? (
         <p className={styles.groupNone}>{EMPTY_LINE[group.status]}</p>
       ) : expanded ? (
-        <ul id={listId} className={styles.cards}>
+        <ul id={listId} className={styles.cards} data-scroller="">
           <AnimatePresence initial={false} mode="popLayout">
             {group.cards.map((card, i) => (
               <motion.li
@@ -292,6 +312,7 @@ export function ProjectCard({ card, index, highlight }: { card: ProjectCardModel
       data-tone={deadline?.tone === "danger" ? "danger" : undefined}
       data-highlight={highlight || undefined}
       data-project-card={project.id}
+      data-tip="Opens this project to edit its tasks, goals, deadline and sources."
       aria-labelledby={nameId}
       aria-describedby={descId}
     >

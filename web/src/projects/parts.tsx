@@ -102,7 +102,14 @@ export function focusWhenReady(find: () => HTMLElement | null | undefined): void
 /** Session or repo glyph, with the kind spelled out for screen readers. */
 export function KindIcon({ kind }: { kind: DetectedProject["kind"] }) {
   return (
-    <span className={styles.kindIcon} title={kind === "session" ? "Claude session" : "GitHub repo"}>
+    <span
+      className={styles.kindIcon}
+      data-tip={
+        kind === "session"
+          ? "Marks a Claude Code session; its working time counts toward a project."
+          : "Marks a GitHub repo; its commits count toward a project."
+      }
+    >
       {kind === "session" ? <SessionIcon /> : <RepoIcon />}
       <span className="sr-only">{kind === "session" ? "Claude session" : "GitHub repo"}</span>
     </span>
