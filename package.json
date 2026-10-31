@@ -35,8 +35,10 @@
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "6.1.2",
     "concurrently": "10.0.6",
+    "topojson-client": "3.1.0",
     "typescript": "7.0.2",
     "vite": "8.3.5",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "world-atlas": "2.0.2"
   }
 }

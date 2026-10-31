@@ -88,7 +88,7 @@
 
   /* Animated backdrop (ui/Backdrop.tsx). Panels let a little of it through. */
   --aurora-opacity: 0.16;
-  --surface-alpha: 86%;
+  --surface-alpha: 74%;
   --panel-top: color-mix(in srgb, var(--bg-surface-top) var(--surface-alpha), transparent);
   --panel-fill: color-mix(in srgb, var(--bg-surface) var(--surface-alpha), transparent);
 
@@ -242,7 +242,7 @@
   --cat-6: #7fc6d6;
 
   --aurora-opacity: 0.1;
-  --surface-alpha: 88%;
+  --surface-alpha: 80%;
   --panel-top: color-mix(in srgb, var(--bg-surface-top) var(--surface-alpha), transparent);
   --panel-fill: color-mix(in srgb, var(--bg-surface) var(--surface-alpha), transparent);
 

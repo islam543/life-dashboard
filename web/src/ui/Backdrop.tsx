@@ -1,11 +1,14 @@
 import { useEffect, useRef } from "react";
+import { figureLayout, type FigureLayout } from "../lib/globe";
 import { useBackdropMotion } from "../lib/motionPref";
 import { makeMotes, moteLinks, pointerGlow, stepMotes, type Mote } from "../lib/motes";
 import { useTheme } from "../lib/theme";
 import styles from "./Backdrop.module.css";
+import { drawFigures } from "./figures";
 
-// The animated layer behind every view: three slow colour glows (CSS) and a field of data motes
-// that drift, link up when close and light up near the pointer (canvas).
+// The animated layer behind every view: three slow colour glows (CSS), two figures (a turning
+// Earth bottom-right and a HUD dial top-left, see ui/figures.ts), and a field of data motes that
+// drift, link up when close and light up near the pointer (canvas).
 //   - Cheap on purpose: the glows only animate transform, the canvas draws at 30 fps at most,
 //     at no more than 1.5x pixel density, and stops while the tab is hidden.
 //   - Still (one frame, no loop) under the OS reduce-motion setting or when Motion is off.
@@ -19,7 +22,17 @@ const MAX_DPR = 1.5;
 function readColors() {
   const css = getComputedStyle(document.documentElement);
   const get = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  return { mote: get("--accent", "#5ce1f5"), link: get("--accent", "#5ce1f5"), glow: get("--accent-strong", "#9aefff") };
+  return {
+    mote: get("--accent", "#5ce1f5"),
+    link: get("--accent", "#5ce1f5"),
+    glow: get("--accent-strong", "#9aefff"),
+    figures: {
+      accent: get("--accent", "#5ce1f5"),
+      strong: get("--accent-strong", "#9aefff"),
+      blue: get("--cat-2", "#4c8dff"),
+      violet: get("--ai", "#b4a6ff"),
+    },
+  };
 }
 
 export function Backdrop() {
@@ -38,6 +51,7 @@ export function Backdrop() {
     let width = 0;
     let height = 0;
     let motes: Mote[] = [];
+    let layout: FigureLayout = figureLayout(1, 1);
     let pointer: { x: number; y: number } | null = null;
     let raf = 0;
     let last = 0;
@@ -54,6 +68,7 @@ export function Backdrop() {
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       motes = makeMotes(width, height);
+      layout = figureLayout(width, height);
     };
 
     const draw = () => {
@@ -62,6 +77,8 @@ export function Backdrop() {
       const py = live() ? (pointer?.y ?? null) : null;
       // Lighter strokes on the light theme, where dark-on-light reads stronger.
       const k = light ? 0.55 : 1;
+
+      drawFigures(ctx, t, layout, colors.figures, light ? 0.7 : 1);
 
       ctx.lineWidth = 1;
       ctx.strokeStyle = colors.link;
