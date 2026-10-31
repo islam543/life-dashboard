@@ -283,3 +283,59 @@ The prompt adds: active and paused projects (name, area, status, deadline, up to
 
 - Routes: `#/projects`, `#/projects/<id>`, `#/notes`, `#/notes/<path>` (URI-encoded). Header switch: Home, Projects, Notes, Life map.
 - Life map, project-time bars and the heatmap use tracked projects (name and area from the registry); hidden names are excluded; untracked active names fold into "Other".
+
+## v1.2: Schedule, task notes, note actions and Jira drafts
+
+Decisions (Islam, 2026-10-31): Jira issues are **reviewed before creation**; **one note per task**; AI
+**proposes** a day or week plan that Islam accepts; new Jira tasks go under **my open epics** (AN epics
+assigned to or reported by me, not Done), else under a new Epic. Not written to Google Calendar.
+
+### Task notes
+- A task is a note in the `Tasks` section (`notes/Tasks/<slug>.md`), created on first use.
+- Frontmatter keys (flat, next to the existing ones): `task_due: YYYY-MM-DD`, `task_start: HH:MM`,
+  `task_minutes: 45`, `task_done: true|false`, `task_source: me|ai`. The project link uses the existing
+  `project` key, so tasks show on their project's page like any linked note.
+- Body: `# <title>` then optional details. Editing the note in Obsidian or the Notes view is fine.
+
+### Schedule API (T27)
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD` (max 14 days) | | `ScheduleRange` |
+| POST | `/api/schedule/tasks` | `NewTaskInput` | `TaskNote` (201) |
+| PATCH | `/api/schedule/tasks?path=<note path>` | `TaskPatch` | `TaskNote` |
+| GET | `/api/schedule/plan` | | `SchedulePlan` |
+| POST | `/api/schedule/plan` | `{ scope: "day" \| "week" }` | `SchedulePlan` (waits for the AI run) |
+| POST | `/api/schedule/plan/accept` | `{ ids: string[] }` | `{ created: TaskNote[] }` |
+| DELETE | `/api/schedule/plan` | | `SchedulePlan` (status none) |
+
+- Meetings come from the calendar connector cache (`data/connectors.json`). The connector calendar
+  window grows from 2 days to 7 days (now to the end of day 7, max 60 events) so the week view has them.
+- The plan run is `claude -p` with **no tools at all** (`--tools ""`, the nextMoves blocked list,
+  `--strict-mcp-config`): it gets today's meetings, open tasks, projects with deadlines, and Next moves
+  as text, and returns PlanItems as JSON. Validated like next moves; stored in `data/schedulePlan.json`.
+  Accepting creates task notes with `task_source: ai`.
+
+### Jira API (T28)
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/jira/actions?path=<note path>` | | `DetectedAction[]` |
+| POST | `/api/jira/draft` | `{ path }` | `JiraDraft` (waits for the AI run) |
+| POST | `/api/jira/create` | `{ path, issues: JiraDraftIssue[] }` (as edited by Islam) | `JiraCreateResult` |
+
+- **Detected actions** (pure, no AI): unchecked or checked `- [ ]` / `- [x]` lines anywhere, plus bullets
+  under a heading named like Action items, Actions, Next steps, To do, Follow-ups. A line already holding
+  a Jira key (`AN-123`) is `jiraKey` filed and is never drafted again.
+- **Draft run**: `claude -p` with `ToolSearch` and only the read tool
+  `mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql`. It looks up my open epics
+  (`project = AN AND issuetype = Epic AND (assignee = currentUser() OR reporter = currentUser()) AND statusCategory != Done`),
+  then proposes one Task per action with a clear title and a 2 to 5 sentence description (context from
+  the note), grouped under a matching epic, or under a new Epic in the draft when nothing matches. Note
+  text is untrusted data. Output validated: types only Task or Epic, parent keys must be in the epic list
+  the run returned, new-epic references must point at an Epic in the same draft, lengths capped.
+- **Create run** (only after Islam reviews and presses Create): `claude -p` with `ToolSearch` and only
+  `mcp__claude_ai_Atlassian__createJiraIssue`. The server sends exact payloads: project `AN`, type,
+  summary, description, assignee account id from config (`JIRA_ACCOUNT_ID`, default Islam's), and for
+  Tasks the parent key. New Epics are created first, their keys filled into the Tasks under them. The
+  reporter is Islam because the connector acts as him. Returned keys must match `^AN-\d+$`.
+- **Write-back**: each created key is appended to its action lines in the note (`- [ ] Send slip (AN-4602)`),
+  through the notes store with the usual conflict check, so the same action is never filed twice.

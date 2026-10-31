@@ -14,7 +14,7 @@ import { CONNECTOR_SERVICES, signInMessage, type ConnectorService } from "./tool
 //   allowed host. Text is never interpreted: "ignore previous instructions" stays a title.
 
 export const MAX_JIRA = 50;
-export const MAX_CALENDAR = 30;
+export const MAX_CALENDAR = 60;
 export const MAX_EMAIL = 20;
 export const TITLE_MAX = 300;
 export const SENDER_MAX = 120;

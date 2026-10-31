@@ -8,8 +8,11 @@ import {
   parseNoteFile,
   parseScalar,
   readFields,
+  readTaskFields,
   serializeNoteFile,
   setEntry,
+  setTaskEntries,
+  withFirstHeading,
   yamlString,
 } from "./notesFrontmatter";
 
@@ -194,5 +197,78 @@ describe("body helpers", () => {
     const iso = formatLocalIso(d);
     expect(iso).toMatch(/^2026-10-30T14:05:07[+-]\d\d:\d\d$/);
     expect(Date.parse(iso)).toBe(d.getTime());
+  });
+});
+
+describe("task fields (v1.2)", () => {
+  const TASK_NOTE = [
+    "---",
+    "title: Write the UAT plan",
+    "created: 2026-10-31T09:00:00+03:00",
+    "updated: 2026-10-31T09:00:00+03:00",
+    "project: qic-fastbind",
+    "tags: []",
+    "task_due: 2026-11-02",
+    'task_start: "09:30"',
+    "task_minutes: 45",
+    "task_done: false",
+    "task_source: ai",
+    "aliases: [uat]",
+    "---",
+    "",
+    "# Write the UAT plan",
+    "",
+  ].join("\n");
+
+  it("round-trips a task note byte for byte and reads every task field", () => {
+    const parsed = parseNoteFile(TASK_NOTE);
+    expect(serializeNoteFile(parsed.frontmatter!, parsed.body)).toBe(TASK_NOTE);
+    expect(readTaskFields(parsed.frontmatter)).toEqual({ due: "2026-11-02", start: "09:30", minutes: 45, done: false, source: "ai" });
+  });
+
+  it("writes the fields it is given and keeps every other line verbatim", () => {
+    const parsed = parseNoteFile(TASK_NOTE);
+    const entries = setTaskEntries(parsed.frontmatter!, { done: true, start: null });
+    const text = serializeNoteFile(entries, parsed.body);
+    expect(text).toContain("task_done: true\n");
+    expect(text).toContain("task_start:\n");
+    expect(text).toContain("task_due: 2026-11-02\n");
+    expect(text).toContain("aliases: [uat]\n");
+    expect(readTaskFields(parseNoteFile(text).frontmatter)).toEqual({ due: "2026-11-02", start: null, minutes: 45, done: true, source: "ai" });
+  });
+
+  it("writes a full set that reads back the same", () => {
+    const task = { due: "2027-02-28", start: "17:05", minutes: 240, done: false, source: "me" as const };
+    const text = serializeNoteFile(setTaskEntries([], task), "# x\n");
+    expect(text).toBe('---\ntask_due: 2027-02-28\ntask_start: "17:05"\ntask_minutes: 240\ntask_done: false\ntask_source: me\n---\n\n# x\n');
+    expect(readTaskFields(parseNoteFile(text).frontmatter)).toEqual(task);
+    const empty = serializeNoteFile(setTaskEntries([], { due: null, start: null, minutes: null }), "");
+    expect(readTaskFields(parseNoteFile(empty).frontmatter)).toEqual({ due: null, start: null, minutes: null, done: false, source: "me" });
+  });
+
+  it("reads bad values from a note edited in Obsidian as unset, never throwing", () => {
+    const bad = [
+      "---",
+      "task_due: tomorrow",
+      "task_start: 25:00",
+      "task_minutes: -5",
+      "task_done: maybe",
+      "task_source: robot",
+      "---",
+    ].join("\n");
+    expect(readTaskFields(parseNoteFile(bad).frontmatter)).toEqual({ due: null, start: null, minutes: null, done: false, source: "me" });
+    const odd = ["---", "task_due: 2026-02-30", "task_start: 9:05", "task_minutes: 99999", "task_done: Yes", "task_minutes: 30", "---"].join("\n");
+    // 2026-02-30 is not a real date; 9:05 reads as 09:05; the first task_minutes key wins.
+    expect(readTaskFields(parseNoteFile(odd).frontmatter)).toEqual({ due: null, start: "09:05", minutes: null, done: true, source: "me" });
+    expect(readTaskFields(null)).toEqual({ due: null, start: null, minutes: null, done: false, source: "me" });
+    expect(readTaskFields(parseNoteFile("---\ntask_due:\n  - a\n  - b\ntask_done: [true]\n---\n").frontmatter)).toMatchObject({ due: null, done: false });
+  });
+
+  it("withFirstHeading renames the first # heading outside code blocks, or adds one", () => {
+    expect(withFirstHeading("# Old\n\nDetails\n# Second\n", "New")).toBe("# New\n\nDetails\n# Second\n");
+    expect(withFirstHeading("```\n# not this\n```\n# Old\n", "New")).toBe("```\n# not this\n```\n# New\n");
+    expect(withFirstHeading("Just text\n", "New")).toBe("# New\n\nJust text\n");
+    expect(withFirstHeading("", "New")).toBe("# New\n");
+    expect(withFirstHeading("## Sub\n", "New")).toBe("# New\n\n## Sub\n");
   });
 });

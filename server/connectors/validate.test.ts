@@ -266,11 +266,12 @@ describe("caps", () => {
     expect(cleanText("  a \n\t b  ", 10)).toBe("a b");
   });
 
-  it("counts: Jira 50, calendar 30, mail 20; duplicates dropped", () => {
+  it("counts: Jira 50, calendar 60, mail 20; duplicates dropped", () => {
     const issues = Array.from({ length: 60 }, (_, i) => ({ key: `FB-${i + 1}` }));
     expect(cleanJiraIssues([{ key: "FB-1" }, ...issues], JIRA).items).toHaveLength(MAX_JIRA);
     expect(cleanJiraIssues([{ key: "FB-1" }, { key: "FB-1" }], JIRA)).toMatchObject({ items: [{ key: "FB-1" }], dropped: 1 });
-    const events = Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, title: "t", start: "2026-11-01" }));
+    const events = Array.from({ length: 70 }, (_, i) => ({ id: `e${i}`, title: "t", start: "2026-11-01" }));
+    expect(MAX_CALENDAR).toBe(60);
     expect(cleanCalendarEvents(events).items).toHaveLength(MAX_CALENDAR);
     const mails = Array.from({ length: 25 }, (_, i) => ({ id: `m${i}`, from: "a", subject: "s", receivedAt: "2026-10-31T06:00:00Z" }));
     expect(cleanEmails(mails).items).toHaveLength(MAX_EMAIL);

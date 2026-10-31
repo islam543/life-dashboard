@@ -7,6 +7,7 @@ import { BLOCKED_TOOLS, NOT_LOGGED_IN_MESSAGE, type RunRequest, type RunResult }
 import { JQL } from "../collectors/jira";
 import { createStore, type Store } from "../store";
 import {
+  CALENDAR_DAYS,
   CONNECTOR_TIMEOUT_MS,
   buildConnectorPrompt,
   calendarWindow,
@@ -18,7 +19,7 @@ import {
   type ConnectorRunDeps,
 } from "./run";
 import { CONNECTOR_SERVICES, CONNECTOR_TOOLS, allowedConnectorTools } from "./tools";
-import { CONNECTORS_FILE, emptyConnectorsCache, type ConnectorsCache } from "./validate";
+import { CONNECTORS_FILE, MAX_CALENDAR, emptyConnectorsCache, type ConnectorsCache } from "./validate";
 
 const SITES = ["qicbizdev.atlassian.net"];
 const NOW = new Date("2026-10-31T09:00:00.000Z");
@@ -105,7 +106,7 @@ describe("buildConnectorPrompt", () => {
       'select:mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql,mcp__claude_ai_Google_Calendar__list_events,mcp__claude_ai_Gmail__search_threads',
     );
     expect(prompt).toContain(
-      'calendarId "primary", startTime "2026-10-31T12:00:00+03:00", endTime "2026-11-01T23:59:59+03:00", timeZone "Asia/Qatar", orderBy "startTime", pageSize 30',
+      'calendarId "primary", startTime "2026-10-31T12:00:00+03:00", endTime "2026-11-06T23:59:59+03:00", timeZone "Asia/Qatar", orderBy "startTime", pageSize 60',
     );
     expect(prompt).toContain('responseStatus "declined"');
     expect(prompt).toContain('query "is:unread in:inbox newer_than:2d", pageSize 20, view "THREAD_VIEW_SUMMARY"');
@@ -113,10 +114,13 @@ describe("buildConnectorPrompt", () => {
     expect(prompt).not.toContain("Not part of this run");
   });
 
-  it("the end of tomorrow is computed in Asia/Qatar, across midnight and month ends", () => {
-    expect(calendarWindow(new Date("2026-10-31T20:30:00Z"))).toEqual({ from: "2026-10-31T23:30:00+03:00", to: "2026-11-01T23:59:59+03:00" });
-    expect(calendarWindow(new Date("2026-10-31T22:30:00Z"))).toEqual({ from: "2026-11-01T01:30:00+03:00", to: "2026-11-02T23:59:59+03:00" });
-    expect(calendarWindow(new Date("2026-12-30T21:00:00Z"))).toEqual({ from: "2026-12-31T00:00:00+03:00", to: "2027-01-01T23:59:59+03:00" });
+  it("the 7-day window ends at the end of day 7 in Asia/Qatar, across midnight, month and year ends", () => {
+    expect(CALENDAR_DAYS).toBe(7);
+    expect(MAX_CALENDAR).toBe(60);
+    expect(calendarWindow(new Date("2026-10-31T20:30:00Z"))).toEqual({ from: "2026-10-31T23:30:00+03:00", to: "2026-11-06T23:59:59+03:00" });
+    expect(calendarWindow(new Date("2026-10-31T22:30:00Z"))).toEqual({ from: "2026-11-01T01:30:00+03:00", to: "2026-11-07T23:59:59+03:00" });
+    expect(calendarWindow(new Date("2026-12-30T21:00:00Z"))).toEqual({ from: "2026-12-31T00:00:00+03:00", to: "2027-01-06T23:59:59+03:00" });
+    expect(calendarWindow(new Date("2027-02-25T10:00:00Z"))).toEqual({ from: "2027-02-25T13:00:00+03:00", to: "2027-03-03T23:59:59+03:00" });
   });
 });
 

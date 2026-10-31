@@ -1,0 +1,154 @@
+/* Task bar above a task note's text. Tokens only. One compact row that wraps in a narrow editor. */
+
+.bar {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--accent-line);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.bar[data-done] {
+  border-color: var(--border);
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.done {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding-right: var(--space-2);
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.check {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field:focus-within .label {
+  color: var(--accent);
+}
+
+.input {
+  min-height: var(--target-min);
+  padding: 0 var(--space-2);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.input option {
+  background: var(--bg-raised);
+  color: var(--text-strong);
+  font-family: var(--font-ui);
+}
+
+select.input {
+  font-family: var(--font-ui);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--accent-line);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input:focus-visible {
+  outline-offset: 1px;
+}
+
+.bar[data-off] .input,
+.bar[data-off] .done {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.overdue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--warn);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.source {
+  padding: var(--space-0-5) var(--space-2);
+  border: var(--hairline) solid var(--ai-line);
+  border-radius: var(--radius-pill);
+  background: var(--ai-soft);
+  color: var(--text-strong);
+  font-size: var(--fs-xs);
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.state:empty {
+  display: none;
+}
+
+.note,
+.error {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--danger);
+}

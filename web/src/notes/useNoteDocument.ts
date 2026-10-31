@@ -78,6 +78,12 @@ export interface NoteDocumentApi extends NoteDocument {
   discardDraft: () => void;
   dismissNotice: () => void;
   reload: () => void;
+  /**
+   * Re-read the file now, after the server changed it (task fields, Jira keys written back), without
+   * the loading state. Same rules as the focus check; `notice` is shown when the text changed. Resolves
+   * the server's copy, or null when it could not be read.
+   */
+  refresh: (notice?: string | null) => Promise<Note | null>;
   /** Write the text (or `from`, e.g. a leftover draft) as a new note in the same section. */
   saveAsNew: (from?: NoteFields) => Promise<Note>;
 }
@@ -85,6 +91,13 @@ export interface NoteDocumentApi extends NoteDocument {
 const EMPTY_FIELDS: NoteFields = { title: "", body: "", projectId: null, tags: [] };
 const DRAFT_DELAY_MS = 300;
 const FOCUS_CHECK_THROTTLE_MS = 2_000;
+const OUTSIDE_NOTICE = "This note changed outside the dashboard, so it now shows the file's latest version.";
+
+/** Same file metadata the editor shows: dates and, for a task note, its task fields (sent at runtime by the server). */
+function sameMeta(a: Note, b: Note): boolean {
+  const task = (n: Note) => JSON.stringify((n as Note & { task?: unknown }).task ?? null);
+  return a.updated === b.updated && a.openActions === b.openActions && task(a) === task(b);
+}
 
 function failureMessage(failure: SaveFailure, err: unknown): string {
   switch (failure) {
@@ -111,6 +124,8 @@ export function useNoteDocument(path: string, onSaved: (note: Note) => void): No
   const [failure, setFailure] = useState<{ kind: SaveFailure; message: string } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const noteRef = useRef<Note | null>(null);
+  noteRef.current = note;
   const fieldsRef = useRef<NoteFields>(EMPTY_FIELDS);
   /** What the server last accepted (or sent on load). Dirty = fields differ from this. */
   const savedRef = useRef<NoteFields | null>(null);
@@ -338,6 +353,67 @@ export function useNoteDocument(path: string, onSaved: (note: Note) => void): No
     };
   }, [path, send]);
 
+  /**
+   * A copy of the file read outside a save (focus check, refresh). Same text: only the metadata may
+   * differ (dates, task fields), so just that updates. Changed text with nothing pending here: show it.
+   * Both sides changed: pause autosave and offer Keep mine or Load theirs.
+   */
+  const adoptOutside = useCallback(
+    (theirs: Note, seq: number, notice: string | null) => {
+      if (!mounted.current || stopped.current || seq !== saveSeq.current || inflight.current) return;
+      const server = serverRef.current;
+      if (server && sameContent(fieldsOf(theirs), server)) {
+        if (noteRef.current && sameMeta(noteRef.current, theirs)) return;
+        setNote(theirs);
+        onSavedRef.current(theirs);
+        return;
+      }
+      if (!dirtyNow()) {
+        adoptServer(theirs);
+        onSavedRef.current(theirs);
+        setNotice(notice);
+        return;
+      }
+      paused.current = true;
+      clearTimer(saveTimer);
+      clearTimer(retryTimer);
+      writeDraft(path, fieldsRef.current);
+      problemRef.current = "The file changed outside the dashboard, so autosave is paused.";
+      setConflict(theirs);
+      setSave({ kind: "paused" });
+    },
+    [path, adoptServer],
+  );
+
+  const markGone = useCallback(
+    (err: unknown) => {
+      if (!mounted.current || !(err instanceof ApiRequestError) || err.status !== 404) return;
+      lastFailure.current = "gone";
+      problemRef.current = failureMessage("gone", err);
+      if (dirtyNow()) writeDraft(path, fieldsRef.current);
+      setFailure({ kind: "gone", message: problemRef.current });
+      setSave({ kind: "failed", failure: "gone", message: problemRef.current, retryAt: null });
+    },
+    [path],
+  );
+
+  const refresh = useCallback(
+    async (notice: string | null = null): Promise<Note | null> => {
+      if (stopped.current) return null;
+      if (inflight.current) await inflight.current;
+      const seq = saveSeq.current;
+      try {
+        const theirs = await notesApi.read(path);
+        adoptOutside(theirs, seq, notice);
+        return theirs;
+      } catch (err) {
+        markGone(err);
+        return null;
+      }
+    },
+    [path, adoptOutside, markGone],
+  );
+
   // The file may have changed in Obsidian while the window was elsewhere: re-read it on focus.
   useEffect(() => {
     if (load !== "ready") return;
@@ -347,32 +423,8 @@ export function useNoteDocument(path: string, onSaved: (note: Note) => void): No
       lastCheck.current = Date.now();
       const seq = saveSeq.current;
       notesApi.read(path).then(
-        (theirs) => {
-          if (!mounted.current || stopped.current || seq !== saveSeq.current || inflight.current) return;
-          const server = serverRef.current;
-          if (server && sameContent(fieldsOf(theirs), server)) return;
-          if (!dirtyNow()) {
-            adoptServer(theirs);
-            onSavedRef.current(theirs);
-            setNotice("This note changed outside the dashboard, so it now shows the file's latest version.");
-            return;
-          }
-          paused.current = true;
-          clearTimer(saveTimer);
-          clearTimer(retryTimer);
-          writeDraft(path, fieldsRef.current);
-          problemRef.current = "The file changed outside the dashboard, so autosave is paused.";
-          setConflict(theirs);
-          setSave({ kind: "paused" });
-        },
-        (err: unknown) => {
-          if (!mounted.current || !(err instanceof ApiRequestError) || err.status !== 404) return;
-          lastFailure.current = "gone";
-          problemRef.current = failureMessage("gone", err);
-          if (dirtyNow()) writeDraft(path, fieldsRef.current);
-          setFailure({ kind: "gone", message: problemRef.current });
-          setSave({ kind: "failed", failure: "gone", message: problemRef.current, retryAt: null });
-        },
+        (theirs) => adoptOutside(theirs, seq, OUTSIDE_NOTICE),
+        markGone,
       );
     };
     window.addEventListener("focus", check);
@@ -381,7 +433,7 @@ export function useNoteDocument(path: string, onSaved: (note: Note) => void): No
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [load, path, adoptServer]);
+  }, [load, path, adoptOutside, markGone]);
 
   // Warn before the tab closes or reloads with text that hasn't reached the file.
   useEffect(() => {
@@ -462,6 +514,7 @@ export function useNoteDocument(path: string, onSaved: (note: Note) => void): No
     discardDraft,
     dismissNotice: () => setNotice(null),
     reload: () => setReloadKey((k) => k + 1),
+    refresh,
     saveAsNew,
   };
 }

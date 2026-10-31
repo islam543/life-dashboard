@@ -3,7 +3,7 @@ import type { Stats } from "node:fs";
 import { lstat, mkdir, open, readdir, readFile, realpath, rename, rmdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { HTTPException } from "hono/http-exception";
-import type { Note, NoteMeta, NoteSection, NotesIndex, NoteTemplate } from "../shared/types";
+import type { Note, NoteMeta, NoteSection, NotesIndex, NoteTemplate, TaskInfo, TaskNote } from "../shared/types";
 import {
   excerptOf,
   fieldLine,
@@ -14,8 +14,11 @@ import {
   openActionLines,
   parseNoteFile,
   readFields,
+  readTaskFields,
   serializeNoteFile,
   setEntry,
+  setTaskEntries,
+  withFirstHeading,
   type FrontmatterEntry,
   type ParsedNoteFile,
 } from "./notesFrontmatter";
@@ -40,6 +43,10 @@ import {
 //   missing, or NOTES_DIR empty: create it with the default sections. "error" when reading fails.
 // - Clock: `opts.now` (default the real clock) for created/updated stamps and file names.
 // - Creating the store does not touch the disk; work starts on the first method call.
+// - v1.2 task notes: every note under the Tasks section carries `task: TaskInfo` (read from the
+//   task_* keys) in its NoteMeta, so it is a TaskNote at runtime. Only the server writes task_*
+//   keys, through the `opts` argument of create and update (server/schedule.ts); the /api/notes
+//   routes never pass it, so a client body cannot set them. Other notes have no `task` key.
 
 /** Body of POST /api/notes after validation. */
 export interface NewNoteInput {
@@ -62,15 +69,33 @@ export interface NotePatch {
   tags?: string[];
 }
 
+/** Server-only extras for create (task notes). Never built from a client body. */
+export interface NoteCreateOptions {
+  /** task_* keys to write. */
+  task?: TaskInfo;
+  /** "dated" (default): `YYYY-MM-DD-<slug>.md`. "slug": `<slug>.md`, then `<slug>-2.md` and so on. */
+  naming?: "dated" | "slug";
+  /** Create the section folder when it is missing (the Tasks section on first use). */
+  ensureSection?: boolean;
+}
+
+/** Server-only extras for update (task notes). Never built from a client body. */
+export interface NoteUpdateOptions {
+  /** task_* keys to change; keys left out keep their lines. With this set, the patch may be empty. */
+  task?: Partial<TaskInfo>;
+  /** When the patch has a title, also set the body's first `# ` heading to it. */
+  heading?: boolean;
+}
+
 export interface NotesStore {
   /** Every section (tree) and every note's metadata. Never throws for a missing folder; see status. */
   index(): Promise<NotesIndex>;
   /** One note with its body. 404 HTTPException when it does not exist. */
   read(path: string): Promise<Note>;
-  /** Writes a new `YYYY-MM-DD-<slug>.md` in `input.section`. */
-  create(input: NewNoteInput): Promise<Note>;
+  /** Writes a new `YYYY-MM-DD-<slug>.md` in `input.section` (or `<slug>.md`, see NoteCreateOptions). */
+  create(input: NewNoteInput, opts?: NoteCreateOptions): Promise<Note>;
   /** Rewrites the note's frontmatter and body; `updated` is bumped. */
-  update(path: string, patch: NotePatch): Promise<Note>;
+  update(path: string, patch: NotePatch, opts?: NoteUpdateOptions): Promise<Note>;
   /** Moves the note into NOTES_DIR/.trash (never a hard delete). */
   remove(path: string): Promise<NotesIndex>;
   /** New folder `name` inside `parent` ("" for top level). */
@@ -107,6 +132,13 @@ const MAX_SLUG_CHARS = 60;
 const MAX_PATH_CHARS = 1024;
 export const DEFAULT_SECTIONS = ["Meeting notes", "Personal notes"] as const;
 export const TRASH_DIR = ".trash";
+/** The section holding task notes (docs/ARCHITECTURE.md "Task notes"); created on first use. */
+export const TASKS_SECTION = "Tasks";
+
+/** True for a note path under the Tasks section (any depth). Case-insensitive, like Windows folders. */
+export function isTaskPath(rel: string): boolean {
+  return rel.toLowerCase().startsWith(`${TASKS_SECTION.toLowerCase()}/`);
+}
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const TEMPLATES: Record<NoteTemplate, string> = {
@@ -175,7 +207,8 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function checkTitle(value: unknown): string {
+/** A note title: one line, 1 to 120 characters after trimming. Throws 400. */
+export function checkTitle(value: unknown): string {
   const title = typeof value === "string" ? value.trim() : "";
   if (title === "" || charCount(title) > MAX_TITLE_CHARS) throw badRequest(`Title must be 1 to ${MAX_TITLE_CHARS} characters`);
   if (CONTROL.test(title)) throw badRequest("Title must be one line of text");
@@ -189,7 +222,8 @@ function checkBody(value: unknown): string {
   return body;
 }
 
-function checkProjectId(value: unknown): string | null {
+/** A project id (slug) or null; "" counts as null. Throws 400. */
+export function checkProjectId(value: unknown): string | null {
   if (value === null || value === "") return null;
   if (typeof value !== "string" || !PROJECT_ID.test(value)) throw badRequest("projectId must be a project id or null");
   return value;
@@ -237,15 +271,18 @@ export function parseNewNoteInput(value: unknown): NewNoteInput {
   return input;
 }
 
-/** Validates a PUT /api/notes/file body. Throws 400, or 413 for a body over 200 KB. */
-export function parseNotePatch(value: unknown): NotePatch {
+/**
+ * Validates a PUT /api/notes/file body. Throws 400, or 413 for a body over 200 KB.
+ * `allowEmpty` (server use only: a task patch that changes only task_* keys) accepts `{}`.
+ */
+export function parseNotePatch(value: unknown, opts: { allowEmpty?: boolean } = {}): NotePatch {
   const o = asObject(value);
   const patch: NotePatch = {};
   if (o.title !== undefined) patch.title = checkTitle(o.title);
   if (o.body !== undefined) patch.body = checkBody(o.body);
   if (o.projectId !== undefined) patch.projectId = checkProjectId(o.projectId);
   if (o.tags !== undefined) patch.tags = checkTags(o.tags);
-  if (Object.keys(patch).length === 0) throw badRequest("Send at least one of title, body, projectId, tags");
+  if (Object.keys(patch).length === 0 && !opts.allowEmpty) throw badRequest("Send at least one of title, body, projectId, tags");
   return patch;
 }
 
@@ -362,11 +399,14 @@ const validDate = (s: string | null): string | null => (s !== null && !Number.is
 const createdTime = (st: Stats) => (st.birthtimeMs > 0 ? st.birthtime : st.mtime);
 const fileTitle = (rel: string) => path.posix.basename(rel).replace(NOTE_FILE, "");
 
-/** NoteMeta from a parsed file; hand-made notes fall back to the first heading, the file name and file times. */
+/**
+ * NoteMeta from a parsed file; hand-made notes fall back to the first heading, the file name and file times.
+ * A note under the Tasks section also gets `task` (a TaskNote).
+ */
 function metaOf(rel: string, parsed: ParsedNoteFile, st: Stats): NoteMeta {
   const f = readFields(parsed.frontmatter);
   const section = path.posix.dirname(rel);
-  return {
+  const meta: NoteMeta = {
     path: rel,
     section: section === "." ? "" : section,
     title: f.title ?? firstHeading(parsed.body) ?? fileTitle(rel),
@@ -377,6 +417,9 @@ function metaOf(rel: string, parsed: ParsedNoteFile, st: Stats): NoteMeta {
     excerpt: excerptOf(parsed.body),
     openActions: openActionLines(parsed.body).length,
   };
+  if (!isTaskPath(rel)) return meta;
+  const task: TaskNote = { ...meta, task: readTaskFields(parsed.frontmatter) };
+  return task;
 }
 
 /** For files the dashboard will not parse (over 200 KB, not UTF-8): listed by name and file times only. */
@@ -532,16 +575,14 @@ export function createNotesStore(notesDir: string, opts: NotesStoreOptions = {})
   }
 
   /** Creates each folder under the real NOTES_DIR one level at a time, checking each stays inside. */
-  async function ensureDirInside(segs: string[]): Promise<string> {
+  async function ensureDirInside(segs: string[], refused: () => HTTPException): Promise<string> {
     const root = await realRoot();
     let current = root;
     for (const seg of segs) {
       const next = path.join(current, seg);
       await mkdir(next).catch(ignoreExists);
       const real = await realpath(next);
-      if (!isInside(root, real) || !(await isDirectory(real))) {
-        throw conflict(`${path.join(dir, TRASH_DIR)} is not a plain folder inside the notes folder, so nothing was deleted`);
-      }
+      if (!isInside(root, real) || !(await isDirectory(real))) throw refused();
       current = real;
     }
     return current;
@@ -653,11 +694,14 @@ export function createNotesStore(notesDir: string, opts: NotesStoreOptions = {})
       return { ...metaOf(loc.rel, parsed, loc.st), body: parsed.body };
     },
 
-    async create(raw) {
+    async create(raw, opts = {}) {
       const input = parseNewNoteInput(raw);
       return serial(async () => {
         await requireReady();
         const sectionSegs = parsePath(input.section, "section");
+        if (opts.ensureSection) {
+          await ensureDirInside(sectionSegs, () => conflict(`The ${input.section} section is not a plain folder inside the notes folder`));
+        }
         const sectionAbs = await locateDir(sectionSegs, "Section not found");
         const at = now();
         const stamp = formatLocalIso(at);
@@ -667,8 +711,9 @@ export function createNotesStore(notesDir: string, opts: NotesStoreOptions = {})
         entries = setEntry(entries, "updated", fieldLine.updated(stamp));
         entries = setEntry(entries, "project", fieldLine.project(input.projectId ?? null));
         entries = setEntry(entries, "tags", fieldLine.tags(input.tags ?? []));
+        if (opts.task) entries = setTaskEntries(entries, opts.task);
         const content = serializeNoteFile(entries, input.body ?? TEMPLATES[input.template ?? "blank"]);
-        const base = `${localDateKey(at)}-${slugify(input.title)}`;
+        const base = opts.naming === "slug" ? slugify(input.title) : `${localDateKey(at)}-${slugify(input.title)}`;
         for (let n = 1; n <= 999; n++) {
           const name = n === 1 ? `${base}.md` : `${base}-${n}.md`;
           const abs = path.join(sectionAbs, name);
@@ -676,12 +721,14 @@ export function createNotesStore(notesDir: string, opts: NotesStoreOptions = {})
           await writeFileAtomic(abs, content);
           return noteFrom([...sectionSegs, name].join("/"), content, await stat(abs));
         }
-        throw conflict("Too many notes with this title today. Choose another title.");
+        throw conflict(
+          opts.naming === "slug" ? "Too many notes with this title. Choose another title." : "Too many notes with this title today. Choose another title.",
+        );
       });
     },
 
-    async update(p, raw) {
-      const patch = parseNotePatch(raw);
+    async update(p, raw, opts = {}) {
+      const patch = parseNotePatch(raw, { allowEmpty: opts.task !== undefined });
       return serial(async () => {
         // Re-read the file now, so edits made in Obsidian since the client loaded it are kept
         // for every field the patch does not replace. A new body replaces the whole body.
@@ -700,7 +747,10 @@ export function createNotesStore(notesDir: string, opts: NotesStoreOptions = {})
           entries = setEntry(entries, "project", fieldLine.project(patch.projectId !== undefined ? patch.projectId : current.projectId));
         }
         if (patch.tags !== undefined || !has("tags")) entries = setEntry(entries, "tags", fieldLine.tags(patch.tags ?? current.tags));
-        const content = serializeNoteFile(entries, patch.body ?? parsed.body);
+        if (opts.task) entries = setTaskEntries(entries, opts.task);
+        let body = patch.body ?? parsed.body;
+        if (opts.heading && patch.title !== undefined) body = withFirstHeading(body, patch.title);
+        const content = serializeNoteFile(entries, body);
         await writeFileAtomic(loc.abs, content);
         return noteFrom(loc.rel, content, await stat(loc.abs));
       });
@@ -711,7 +761,9 @@ export function createNotesStore(notesDir: string, opts: NotesStoreOptions = {})
         const loc = await locateNote(p);
         const segs = loc.rel.split("/");
         const name = segs.at(-1)!;
-        const trashDir = await ensureDirInside([TRASH_DIR, ...segs.slice(0, -1)]);
+        const trashDir = await ensureDirInside([TRASH_DIR, ...segs.slice(0, -1)], () =>
+          conflict(`${path.join(dir, TRASH_DIR)} is not a plain folder inside the notes folder, so nothing was deleted`),
+        );
         let target = path.join(trashDir, name);
         if (await exists(target)) {
           const base = name.replace(NOTE_FILE, "");

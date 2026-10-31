@@ -30,6 +30,10 @@ Open backlog = files at this level. Finished tickets move to `done/`. Plan: `../
 | T24 | Right-click menus: Projects | frontend-developer | foundation | 8 | done |
 | T25 | Right-click menus: Notes and Life map | frontend-developer | foundation | 8 | done |
 | T26 | Jira, Calendar and Gmail through Claude connectors | backend-developer | none | 9 | done |
+| T27 | Schedule server: task notes, range, AI plan | backend-developer | contract | 10 | done |
+| T28 | Jira server: actions, AI draft, create, write-back | backend-developer | contract | 10 | done |
+| T29 | Home Schedule panel | frontend-developer | contract | 10 | done |
+| T30 | Notes task bar, detected actions, Jira review | frontend-developer | contract | 10 | done |
 
 ## Assumptions taken (say if any is wrong)
 

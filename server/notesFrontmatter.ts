@@ -16,6 +16,19 @@
 // 'single' or "double" quoted scalars, `[a, b]` flow lists and `- item` block lists. Every other
 // line of the block (keys this app does not own, comments, nested values) is kept verbatim, so a
 // note edited in Obsidian keeps its own properties when the dashboard saves it. Pure functions only.
+//
+// v1.2 task notes (docs/ARCHITECTURE.md "Task notes") add flat keys next to these:
+//
+//   task_due: 2026-11-02
+//   task_start: "09:30"
+//   task_minutes: 45
+//   task_done: false
+//   task_source: me
+//
+// task_start is written quoted so a YAML 1.1 reader does not turn 09:30 into a number. Reading is
+// forgiving: a value that does not fit (hand-edited in Obsidian) reads as unset, never an error.
+
+import type { TaskInfo } from "../shared/types";
 
 /** One top-level frontmatter entry: a `key:` line plus its indented or `- ` continuation lines. */
 export interface FrontmatterEntry {
@@ -222,7 +235,107 @@ export const fieldLine = {
   updated: (iso: string) => `updated: ${iso}`,
   project: (id: string | null) => (id ? `project: ${yamlString(id)}` : "project:"),
   tags: (tags: string[]) => `tags: [${tags.map(yamlString).join(", ")}]`,
+  // Task fields: callers pass values already checked by the readers below (isTaskDate, ...).
+  taskDue: (due: string | null) => (due ? `task_due: ${due}` : "task_due:"),
+  taskStart: (start: string | null) => (start ? `task_start: "${start}"` : "task_start:"),
+  taskMinutes: (minutes: number | null) => (minutes !== null ? `task_minutes: ${minutes}` : "task_minutes:"),
+  taskDone: (done: boolean) => `task_done: ${done ? "true" : "false"}`,
+  taskSource: (source: TaskInfo["source"]) => `task_source: ${source}`,
 };
+
+/** Frontmatter key for each TaskInfo field. */
+export const TASK_KEYS = {
+  due: "task_due",
+  start: "task_start",
+  minutes: "task_minutes",
+  done: "task_done",
+  source: "task_source",
+} as const satisfies Record<keyof TaskInfo, string>;
+
+/** Longest planned length a task may carry: one day. */
+export const MAX_TASK_MINUTES = 24 * 60;
+
+/** A real calendar date written YYYY-MM-DD. */
+export function isTaskDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(y!, m! - 1, d!));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m! - 1 && date.getUTCDate() === d;
+}
+
+/** A 24-hour time written HH:MM, 00:00 to 23:59. */
+export function isTaskTime(value: unknown): value is string {
+  return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+/** A whole number of minutes, 1 to MAX_TASK_MINUTES. */
+export function isTaskMinutes(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_TASK_MINUTES;
+}
+
+/**
+ * Reads the task_* keys. Anything missing or malformed reads as unset: due, start and minutes
+ * null, done false, source "me". "9:30" is read as 09:30; done is true only for true or yes.
+ */
+export function readTaskFields(entries: FrontmatterEntry[] | null): TaskInfo {
+  const task: TaskInfo = { due: null, start: null, minutes: null, done: false, source: "me" };
+  if (!entries) return task;
+  const text = (key: string): string | null => {
+    const entry = entries.find((e) => e.key === key);
+    if (!entry) return null;
+    const value = entryValue(entry).trim();
+    return NULLISH.has(value) ? null : value;
+  };
+  const due = text(TASK_KEYS.due);
+  if (isTaskDate(due)) task.due = due;
+  const start = text(TASK_KEYS.start);
+  const time = start !== null ? /^(\d{1,2}):(\d{2})$/.exec(start) : null;
+  if (time) {
+    const padded = `${time[1]!.padStart(2, "0")}:${time[2]}`;
+    if (isTaskTime(padded)) task.start = padded;
+  }
+  const minutes = text(TASK_KEYS.minutes);
+  if (minutes !== null && /^\d{1,5}$/.test(minutes) && isTaskMinutes(Number(minutes))) task.minutes = Number(minutes);
+  const done = text(TASK_KEYS.done);
+  task.done = done !== null && /^(?:true|yes)$/i.test(done);
+  if (text(TASK_KEYS.source) === "ai") task.source = "ai";
+  return task;
+}
+
+/** Sets the given task fields on a frontmatter list; fields left out keep their lines. Returns a new list. */
+export function setTaskEntries(entries: FrontmatterEntry[], task: Partial<TaskInfo>): FrontmatterEntry[] {
+  let next = entries;
+  if (task.due !== undefined) next = setEntry(next, TASK_KEYS.due, fieldLine.taskDue(task.due));
+  if (task.start !== undefined) next = setEntry(next, TASK_KEYS.start, fieldLine.taskStart(task.start));
+  if (task.minutes !== undefined) next = setEntry(next, TASK_KEYS.minutes, fieldLine.taskMinutes(task.minutes));
+  if (task.done !== undefined) next = setEntry(next, TASK_KEYS.done, fieldLine.taskDone(task.done));
+  if (task.source !== undefined) next = setEntry(next, TASK_KEYS.source, fieldLine.taskSource(task.source));
+  return next;
+}
+
+/**
+ * The body with its first `# ` heading (outside code blocks) set to `title`. A body without one
+ * gets `# title` on top, so the heading always names the task.
+ */
+export function withFirstHeading(body: string, title: string): string {
+  const lines = normalizeText(body).split("\n");
+  let fence: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker) {
+      if (fence === null) fence = marker[0]!;
+      else if (marker[0] === fence) fence = null;
+      continue;
+    }
+    if (fence === null && /^#[ \t]+\S/.test(line)) {
+      lines[i] = `# ${title}`;
+      return lines.join("\n");
+    }
+  }
+  const rest = normalizeText(body);
+  return rest.trim() === "" ? `# ${title}\n` : `# ${title}\n\n${rest}`;
+}
 
 const pad = (n: number, width = 2) => String(n).padStart(width, "0");
 

@@ -473,3 +473,32 @@ describe("path confinement", () => {
     expect(await readFile(target, "utf8")).toBe("# Secret");
   });
 });
+
+describe("task notes (v1.2)", () => {
+  it("only notes under Tasks carry task fields, and a plain update keeps the task_* keys", async () => {
+    await mkdir(at("Tasks"), { recursive: true });
+    await mkdir(at("Meeting notes"), { recursive: true });
+    const keys = "---\ntask_due: 2026-11-02\ntask_done: true\n---\n";
+    await writeFile(at("Tasks", "a.md"), `${keys}# A\n`);
+    await writeFile(at("Meeting notes", "b.md"), `${keys}# B\n`);
+    const index = await store.index();
+    const byPath = Object.fromEntries(index.notes.map((n) => [n.path, n as unknown as Record<string, unknown>]));
+    expect(byPath["Tasks/a.md"]!.task).toEqual({ due: "2026-11-02", start: null, minutes: null, done: true, source: "me" });
+    expect(byPath["Meeting notes/b.md"]).not.toHaveProperty("task");
+
+    // A client patch (no opts) cannot set task fields, and keeps the ones on file.
+    const updated = await store.update("Tasks/a.md", { body: "# A\n\nmore", task: { done: false } } as never);
+    expect((updated as unknown as { task: unknown }).task).toEqual({ due: "2026-11-02", start: null, minutes: null, done: true, source: "me" });
+    expect(await readFile(at("Tasks", "a.md"), "utf8")).toContain("task_due: 2026-11-02\ntask_done: true\n");
+  });
+
+  it("creates the Tasks section on first use and names task files by slug only", async () => {
+    const note = await store.create(
+      { section: "Tasks", title: "Call Ahmed", body: "# Call Ahmed\n" },
+      { task: { due: null, start: "09:00", minutes: 15, done: false, source: "ai" }, naming: "slug", ensureSection: true },
+    );
+    expect(note.path).toBe("Tasks/call-ahmed.md");
+    expect(await readFile(at("Tasks", "call-ahmed.md"), "utf8")).toContain('task_start: "09:00"\ntask_minutes: 15\ntask_done: false\ntask_source: ai\n');
+    await expect(store.create({ section: "Missing", title: "x" }, { naming: "slug" })).rejects.toMatchObject({ status: 404 });
+  });
+});

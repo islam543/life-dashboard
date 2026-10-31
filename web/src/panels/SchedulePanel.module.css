@@ -1,0 +1,1087 @@
+/* Schedule: a day timeline or seven week columns, with the task form, the AI plan review and the
+   "Not placed" strip around it. Meetings are cyan (data), tasks neutral, AI proposals violet and dashed. */
+
+/* ---------- Header ---------- */
+
+.meta {
+  color: var(--text);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+/* ---------- Body layout ---------- */
+
+.content {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Narrow: the plan review first (it waits on a decision), then the day or week, then the lists.
+   Wide: the day or week on the left, the review and lists in a column beside it. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "review"
+    "main"
+    "aside";
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.reviewArea {
+  grid-area: review;
+  min-width: 0;
+}
+
+.main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.aside {
+  grid-area: aside;
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@container (min-width: 860px) {
+  .layout[data-has-side] {
+    grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "main review"
+      "main aside";
+    row-gap: 0;
+    column-gap: var(--space-5);
+    align-items: start;
+  }
+
+  .layout[data-has-side] .reviewArea {
+    margin-bottom: var(--space-4);
+  }
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  line-height: var(--lh-snug);
+}
+
+.count {
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-pill);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Lines above the content ---------- */
+
+.calendarNote {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.calendarNote > span:first-child {
+  position: relative;
+  top: 1px;
+}
+
+.calendarHint {
+  color: var(--text-muted);
+}
+
+.actionError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border: var(--hairline) solid var(--danger-line);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.actionError p {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inlineProblem {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+/* ---------- Day summary and all-day meetings ---------- */
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.summary > span + span::before {
+  content: "\00B7";
+  margin-right: var(--space-2);
+  color: var(--text-faint);
+}
+
+.summary > .pastTag + span::before {
+  content: none;
+}
+
+.free {
+  color: var(--accent);
+}
+
+.pastTag {
+  padding: 0 var(--space-1-5);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.noTimed {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.allDay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5) var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.allDay > .kicker {
+  white-space: nowrap;
+}
+
+.allDayList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.allDayChip {
+  min-width: 0;
+  padding: var(--space-0-5) var(--space-2);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Day timeline ---------- */
+
+.timeline {
+  --gutter: 48px;
+  position: relative;
+  margin: var(--space-2) 0;
+}
+
+.hours {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hour {
+  position: absolute;
+  left: var(--gutter);
+  right: 0;
+  height: 0;
+  border-top: var(--hairline) solid var(--chart-grid);
+}
+
+.hourLabel {
+  position: absolute;
+  right: calc(100% + var(--space-2));
+  top: -0.7em;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* The part of today already gone, faintly shaded. */
+.elapsed {
+  position: absolute;
+  top: 0;
+  left: var(--gutter);
+  right: 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: color-mix(in srgb, var(--bg-sunken) 45%, transparent);
+  pointer-events: none;
+}
+
+.now {
+  position: absolute;
+  left: var(--gutter);
+  right: 0;
+  z-index: 2;
+  height: 0;
+  border-top: 2px solid var(--accent);
+  box-shadow: var(--glow-accent);
+  pointer-events: none;
+}
+
+.now::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.nowLabel {
+  position: absolute;
+  right: calc(100% + var(--space-1));
+  top: -0.75em;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--gutter) + var(--space-1));
+  right: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One meeting, task or proposal. --lane / --lanes split the width when items overlap. */
+.block {
+  position: absolute;
+  left: calc(100% * var(--lane) / var(--lanes));
+  width: calc(100% / var(--lanes) - 3px);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 2px var(--space-1-5);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+/* Opaque fills, so the hour lines never show through the text. */
+.block.event {
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+  color: var(--text-strong);
+}
+
+.block.task {
+  padding-left: 0;
+  border: var(--hairline) solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-strong);
+}
+
+.block.plan {
+  padding: 0;
+  border: var(--hairline) dashed var(--ai);
+  background: color-mix(in srgb, var(--ai) 12%, var(--bg-surface));
+  color: var(--ai);
+}
+
+.pastBlock {
+  opacity: 0.62;
+}
+
+.off {
+  opacity: 0.45;
+}
+
+.blockText {
+  display: grid;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.blockTime {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.block.plan .blockTime {
+  color: var(--ai);
+}
+
+.blockTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
+}
+
+/* Short blocks: time and title on one line. */
+.compact {
+  align-items: center;
+}
+
+.compact .blockText {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1-5);
+  padding-top: 0;
+}
+
+.compact .blockTitle {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.isDone .blockTitle,
+.isDone .taskTitle,
+.isDone .weekTitle {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* ---------- Links ---------- */
+
+.noteLink,
+.meetingLink {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-xs);
+}
+
+.noteLink:hover,
+.meetingLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.meetingLink {
+  display: inline;
+}
+
+.extIcon {
+  display: inline-block;
+  margin-left: var(--space-1);
+  vertical-align: -1px;
+  color: var(--text-faint);
+}
+
+.meetingLink:hover .extIcon,
+.meetingLink:focus-visible .extIcon {
+  color: var(--accent);
+}
+
+/* ---------- Checkbox: a real input over a drawn box ---------- */
+
+.check {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+}
+
+.check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.check svg {
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.box {
+  fill: transparent;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  transition:
+    fill var(--dur-base) var(--ease-out),
+    stroke var(--dur-fast) var(--ease-out);
+}
+
+.check:hover .box {
+  stroke: var(--accent);
+}
+
+.check input:focus-visible + svg {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.tick {
+  fill: none;
+  stroke: var(--on-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-out) 60ms;
+}
+
+.check input:checked + svg .box {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.check input:checked + svg .tick {
+  stroke-dashoffset: 0;
+}
+
+.checkAi:hover .box {
+  stroke: var(--ai);
+}
+
+.checkAi input:checked + svg .box {
+  fill: var(--ai);
+  stroke: var(--ai);
+}
+
+/* ---------- AI proposals ---------- */
+
+.aiTag {
+  flex: none;
+  padding: 0 var(--space-1);
+  border: var(--hairline) solid var(--ai-line);
+  border-radius: var(--radius-pill);
+  color: var(--ai);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  line-height: 1.35;
+}
+
+.ghostButton {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 2px var(--space-1-5);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.ghostButton:hover {
+  background: var(--ai-soft);
+}
+
+.compact .ghostButton {
+  align-items: center;
+}
+
+.compact .ghostButton .blockTitle {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ghostRow {
+  border: var(--hairline) dashed var(--ai-line);
+  border-radius: var(--radius-sm);
+  background: var(--ai-soft);
+  color: var(--ai);
+  font-size: var(--fs-sm);
+}
+
+.ghostRow .ghostButton {
+  align-items: center;
+  min-height: 28px;
+}
+
+.ghostWhen {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+/* ---------- Plan running, problem and review ---------- */
+
+.planRunning,
+.planProblem,
+.review {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--ai-line);
+  border-radius: var(--radius-md);
+  background: var(--ai-soft);
+  min-width: 0;
+}
+
+.planProblem {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+.planRunningLine,
+.planProblemLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ai);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+
+.planProblemLine {
+  align-items: baseline;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.planHint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.reviewHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.reviewTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--ai);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.reviewMeta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.reviewList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reviewItem {
+  display: grid;
+  gap: var(--space-0-5);
+}
+
+.reviewLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.reviewText {
+  display: grid;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.reviewItemTitle {
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.reviewWhen {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.reviewReason {
+  margin-left: calc(24px + var(--space-2));
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+}
+
+.reviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ---------- Any time and Not placed lists ---------- */
+
+.side {
+  display: grid;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.taskRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: var(--space-0-5) var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.taskRow:hover {
+  background: var(--bg-hover);
+}
+
+.taskText {
+  display: grid;
+  min-width: 0;
+}
+
+.taskTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.taskMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.taskMeta:empty {
+  display: none;
+}
+
+.overdue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--warn);
+}
+
+.todayButton {
+  color: var(--accent);
+}
+
+.more {
+  justify-self: start;
+  min-height: 24px;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+
+.more:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Week columns ---------- */
+
+.weekHost {
+  container-type: inline-size;
+}
+
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-sm);
+}
+
+.col[data-today] {
+  border-color: var(--accent-line);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.col[data-past] {
+  opacity: 0.62;
+}
+
+.colHead {
+  margin: 0;
+  font-size: inherit;
+}
+
+.colButton {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1-5);
+  width: 100%;
+  min-height: 28px;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.colButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.colNum {
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.col[data-today] .colDay,
+.col[data-today] .colNum {
+  color: var(--accent);
+}
+
+.colList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.colEmpty {
+  padding: 0 var(--space-1);
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+.weekRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-0-5) var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.weekRow.event {
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+
+.weekRow.task {
+  padding-left: 0;
+  color: var(--text-strong);
+}
+
+.weekRow.plan {
+  padding: 0;
+  border: var(--hairline) dashed var(--ai-line);
+  background: var(--ai-soft);
+  color: var(--ai);
+}
+
+.weekRow.plan .ghostButton {
+  flex-direction: column;
+  gap: 0;
+  padding: var(--space-0-5) var(--space-1);
+}
+
+.weekText {
+  display: grid;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.weekTime {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.weekRow.plan .weekTime {
+  color: var(--ai);
+}
+
+/* break-word, not anywhere: in a narrow column a word wraps whole and only an over-long one breaks. */
+.weekTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* A narrow panel (phone, a tight column): days stack, the date on the left of each. */
+@container (max-width: 560px) {
+  .week {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .col {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .weekTitle {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+}
+
+/* ---------- Add task form ---------- */
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-sunken) 60%, transparent);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.fieldLabel {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--space-2);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--accent-line);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input:focus-visible {
+  outline-offset: 1px;
+}
+
+.input:disabled {
+  opacity: 0.55;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.input[type="date"],
+.input[type="time"] {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.fieldError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick,
+  .box,
+  .input {
+    transition: none;
+  }
+}

@@ -5,6 +5,7 @@
   grid-template-areas:
     "needs"
     "moves"
+    "sched"
     "kpis"
     "week"
     "bars"
@@ -25,8 +26,8 @@
   flex: 1;
 }
 
-/* Needs you and Next moves, and the two Time by project panels: a column of their own only on
-   ultrawide screens (see the end). */
+/* Needs you, Next moves and Schedule, and the two Time by project panels: a column of their own only
+   on ultrawide screens (see the end). */
 .act,
 .side {
   display: contents;
@@ -51,6 +52,10 @@
   grid-area: moves;
 }
 
+.sched {
+  grid-area: sched;
+}
+
 .kpis {
   grid-area: kpis;
 }
@@ -71,7 +76,8 @@
   grid-area: heat;
 }
 
-/* Tablet and small laptop: Next moves spans two rows beside the numbers and the project bars. */
+/* Tablet and small laptop: Next moves spans two rows beside the numbers and the project bars; the
+   Schedule follows it across the full width (seven week columns need it). */
 @media (min-width: 840px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -80,6 +86,7 @@
       "moves kpis"
       "moves bars"
       "moves bars30"
+      "sched sched"
       "week  week"
       "heat  heat";
   }
@@ -100,6 +107,7 @@
       "moves moves moves moves moves kpis  kpis  kpis  kpis  kpis  kpis  kpis"
       "moves moves moves moves moves bars  bars  bars  bars  bars  bars  bars"
       "moves moves moves moves moves bars30 bars30 bars30 bars30 bars30 bars30 bars30"
+      "sched sched sched sched sched sched sched sched sched sched sched sched"
       "week  week  week  week  week  week  week  week  week  week  week  week"
       "heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat";
   }
@@ -107,7 +115,7 @@
 
 /* Ultrawide (21:9, about 2560 x 940 of viewport): the whole of Home fits the screen, no page scroll.
    Three columns read left to right by urgency:
-     left 30%    act now: Needs you above Next moves, each scrolling inside itself
+     left 30%    act now: Needs you, Next moves, then Schedule, each scrolling inside itself
      centre 47%  the numbers: key numbers, this week, the last 52 weeks
      right 23%   where the time went: project bars for the week or month on top, the last 30 days
                  under it (8 projects plus Other each; a panel scrolls inside if it runs short)
@@ -139,15 +147,24 @@
     min-height: 0;
   }
 
-  /* Needs you takes what it needs, up to a little over half; Next moves gets the rest. */
+  /* The left column's split (T29). Needs you is a strip of short cards: it takes what it needs, capped
+     at about a third (was 55% before Schedule joined the column). Next moves and Schedule share the
+     rest 1 : 1.25. The top move, the one that matters between tasks, still shows in full in its part.
+     The day timeline needs height to show a few hours around "now" (it scrolls itself there), so
+     Schedule gets the larger part. At 2560x940 on a calm day that is about 150 / 290 / 370 px. */
   .needs {
     flex: 0 1 auto;
-    max-height: 55%;
+    max-height: 32%;
     min-height: 0;
   }
 
   .moves {
     flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .sched {
+    flex: 1.25 1 0;
     min-height: 0;
   }
 

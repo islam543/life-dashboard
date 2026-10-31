@@ -11,8 +11,10 @@ import type { MoveState } from "./ai/nextMoves";
 import { validateCheckin } from "./checkinValidate";
 import { config, PORT, WEB_DEV_PORT } from "./config";
 import { createNotesStore, type NotesStore } from "./notes";
+import { jiraRoutes } from "./routes/jira";
 import { notesRoutes } from "./routes/notes";
 import { projectsRoutes } from "./routes/projects";
+import { scheduleRoutes } from "./routes/schedule";
 import type { SnapshotService } from "./snapshot";
 import { createStore, type Store } from "./store";
 
@@ -130,7 +132,9 @@ export function createApp(deps: AppDeps): Hono {
   const noteBodies = bodyLimit({ maxSize: MAX_NOTES_BODY_BYTES, onError: tooLarge });
   app.use("/api/*", (c, next) => {
     const p = c.req.path;
-    return p === "/api/notes" || p.startsWith("/api/notes/") ? noteBodies(c, next) : smallBodies(c, next);
+    // Notes and Jira create carry note-sized text (up to 15 issues with long or Arabic descriptions).
+    const big = p === "/api/notes" || p.startsWith("/api/notes/") || p.startsWith("/api/jira/");
+    return big ? noteBodies(c, next) : smallBodies(c, next);
   });
 
   app.get("/api/snapshot", (c) => c.json(deps.snapshots.get(now())));
@@ -183,8 +187,13 @@ export function createApp(deps: AppDeps): Hono {
   // v1.1 routers. Mounted after every guard above, so they inherit the Host, Origin and
   // Sec-Fetch-Site checks, no-store and the body limits. Their errors reach onError below.
   const snapshots = deps.snapshots;
-  app.route("/api/projects", projectsRoutes({ store: deps.store ?? createStore(config.dataDir), snapshots, now, log }));
-  app.route("/api/notes", notesRoutes({ notes: deps.notes ?? createNotesStore(config.notesDir), snapshots, now, log }));
+  const store = deps.store ?? createStore(config.dataDir);
+  const notes = deps.notes ?? createNotesStore(config.notesDir);
+  app.route("/api/projects", projectsRoutes({ store, snapshots, now, log }));
+  app.route("/api/notes", notesRoutes({ notes, snapshots, now, log }));
+  // v1.2 routers (tickets T27, T28): same guards, same shared notes store.
+  app.route("/api/schedule", scheduleRoutes({ notes, store, snapshots, now, log }));
+  app.route("/api/jira", jiraRoutes({ notes, store, snapshots, now, log }));
 
   const dist = deps.webDistDir ? path.resolve(deps.webDistDir) : null;
   if (dist && existsSync(path.join(dist, "index.html"))) {

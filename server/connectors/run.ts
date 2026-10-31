@@ -78,14 +78,17 @@ export function connectorArgs(prompt: string, tools: ToolLists = CONNECTOR_TOOLS
 const pad = (n: number) => String(n).padStart(2, "0");
 const QATAR_OFFSET_MS = 3 * 60 * 60_000;
 
-/** The calendar window: now until the end of tomorrow, both in Asia/Qatar (UTC+3, no DST). */
+/** Days in the calendar window, today included (v1.2: the Schedule week view needs a week of meetings). */
+export const CALENDAR_DAYS = 7;
+
+/** The calendar window: now until the end of day 7 (today is day 1), both in Asia/Qatar (UTC+3, no DST). */
 export function calendarWindow(now: Date): { from: string; to: string } {
   const q = new Date(now.getTime() + QATAR_OFFSET_MS); // UTC fields of q are Qatar wall time
   const day = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-  const tomorrow = new Date(Date.UTC(q.getUTCFullYear(), q.getUTCMonth(), q.getUTCDate() + 1));
+  const last = new Date(Date.UTC(q.getUTCFullYear(), q.getUTCMonth(), q.getUTCDate() + CALENDAR_DAYS - 1));
   return {
     from: `${day(q)}T${pad(q.getUTCHours())}:${pad(q.getUTCMinutes())}:00${QATAR_OFFSET}`,
-    to: `${day(tomorrow)}T23:59:59${QATAR_OFFSET}`,
+    to: `${day(last)}T23:59:59${QATAR_OFFSET}`,
   };
 }
 

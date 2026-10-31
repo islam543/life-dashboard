@@ -30,11 +30,14 @@ import { EmptyState } from "../ui/EmptyState";
 import { Panel } from "../ui/Panel";
 import { Skeleton } from "../ui/Skeleton";
 import { StatusDot } from "../ui/StatusDot";
+import { ActionsSection, useNoteJira } from "./ActionsSection";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { copyText, fullPath } from "./filePaths";
 import { CheckIcon, CopyIcon, TrashIcon, WarnIcon } from "./icons";
+import { JiraReviewDialog } from "./JiraReviewDialog";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { TagInput } from "./TagInput";
+import { isTaskPath, TaskBar, taskOf } from "./TaskBar";
 import { ULTRAWIDE_QUERY, useMediaQuery } from "./useMediaQuery";
 import { useNoteDocument, type NoteDocumentApi, type SaveState } from "./useNoteDocument";
 import type { ProjectOptions } from "./useProjectOptions";
@@ -47,6 +50,9 @@ import styles from "./NoteEditor.module.css";
 // (two panels, so the Notes view shows four panes), each text column kept to 75 characters or less.
 // Right-click outside the text fields offers Show preview or Edit (when there are tabs), Copy path and
 // Delete note; the text fields keep the browser's own menu for spelling and paste.
+// A note in the Tasks section gets a task bar under its title (day, start, length, Done). Under the
+// preview (the Preview tab, or the live Preview panel on ultrawide) every note lists its detected
+// actions, with "Draft Jira tasks with AI" and the review dialog (ActionsSection, JiraReviewDialog).
 
 /** Something the Notes view asks the editor to do once the note has loaded (from the notes list menu). */
 export type EditorAsk = "project" | "delete";
@@ -379,6 +385,15 @@ export function NoteEditor({
   const { flush, hasUnsaved, problem, save } = doc;
   useImperativeHandle(handleRef, () => ({ flush, hasUnsaved, failure: problem }), [flush, hasUnsaved, problem]);
 
+  const jira = useNoteJira({
+    path,
+    ready: doc.load === "ready",
+    version: doc.note?.updated ?? null,
+    editorBlocked: doc.conflict ? "Settle the outside change first: Keep mine or Load theirs." : null,
+    flush,
+    refresh: doc.refresh,
+  });
+
   // A note just created: put the caret under its first heading so typing starts right away.
   useEffect(() => {
     if (!autoFocusBody || focused.current || doc.load !== "ready") return;
@@ -681,6 +696,10 @@ export function NoteEditor({
           ) : null}
         </div>
 
+        {isTaskPath(path) ? (
+          <TaskBar path={path} task={taskOf(note)} disabled={disabled} onChanged={() => void doc.refresh(null)} />
+        ) : null}
+
         <div className={styles.metaRow}>
           <ProjectSelect
             value={fields.projectId}
@@ -756,7 +775,12 @@ export function NoteEditor({
               hidden={mode !== "preview"}
               tabIndex={0}
             >
-              {mode === "preview" ? <MarkdownPreview markdown={fields.body} onToggleTask={toggleTask} /> : null}
+              {mode === "preview" ? (
+                <>
+                  <MarkdownPreview markdown={fields.body} onToggleTask={toggleTask} />
+                  <ActionsSection jira={jira} layout="tab" />
+                </>
+              ) : null}
             </div>
           </>
         )}
@@ -822,6 +846,8 @@ export function NoteEditor({
           {notesDir}
         </p>
       </ConfirmDialog>
+
+      <JiraReviewDialog jira={jira} noteTitle={fields.title.trim() || "Untitled note"} />
     </Panel>
   );
 
@@ -839,6 +865,7 @@ export function NoteEditor({
             empty="Nothing to preview yet. What you write in the note shows here, formatted, as you type."
           />
         </div>
+        <ActionsSection jira={jira} layout="panel" />
       </Panel>
     </>
   );

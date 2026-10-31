@@ -81,3 +81,34 @@ export interface Note extends NoteMeta { body: string }
 export interface NoteSection { path: string; name: string; children: NoteSection[]; noteCount: number }
 export interface NotesIndex { status: SourceStatus; message?: string; dir: string; sections: NoteSection[]; notes: NoteMeta[] }  // dir = absolute notes folder, shown so the files can be found in Obsidian
 export type NoteTemplate = "blank" | "meeting" | "personal";
+
+// v1.2: schedule, task notes, note actions and Jira drafts (docs/ARCHITECTURE.md "v1.2").
+// A task is a note in the "Tasks" section whose frontmatter carries the task fields below.
+export interface TaskInfo { due: string | null;   // YYYY-MM-DD, null = no day yet
+  start: string | null;                            // HH:MM local, null = any time that day
+  minutes: number | null;                          // planned length
+  done: boolean; source: "me" | "ai" }
+export interface TaskNote extends NoteMeta { task: TaskInfo }
+export interface ScheduleDay { date: string; events: CalendarEvent[]; tasks: TaskNote[] }   // date YYYY-MM-DD, local
+export interface ScheduleRange { from: string; to: string; days: ScheduleDay[];
+  unscheduled: TaskNote[];                         // open tasks with no due date
+  overdue: TaskNote[];                             // open tasks due before `from`
+  calendar: { status: SourceStatus; message?: string } }
+export interface NewTaskInput { title: string; projectId: string | null; due: string | null; start: string | null;
+  minutes: number | null; details?: string }
+export interface TaskPatch { title?: string; projectId?: string | null; due?: string | null; start?: string | null;
+  minutes?: number | null; done?: boolean }
+export interface PlanItem { id: string; title: string; projectId: string | null; date: string; start: string | null;
+  minutes: number | null; reason: string }
+export interface SchedulePlan { status: "none" | "ready" | "error"; scope: "day" | "week" | null;
+  generatedAt: string | null; message?: string; items: PlanItem[] }
+
+export interface DetectedAction { id: string; text: string; line: number;   // line = 1-based line in the note body
+  done: boolean; jiraKey: string | null }                                     // jiraKey = an AN-123 already on the line
+export interface JiraEpicRef { key: string; summary: string }
+export type JiraParent = { kind: "existing"; key: string } | { kind: "new"; draftId: string } | null;
+export interface JiraDraftIssue { draftId: string; actionIds: string[]; type: "Task" | "Epic";
+  summary: string; description: string; parent: JiraParent }   // Tasks only: an existing epic of mine, or a new Epic in this draft
+export interface JiraDraft { notePath: string; createdAt: string; epics: JiraEpicRef[]; issues: JiraDraftIssue[] }
+export interface JiraCreated { draftId: string; key: string; url: string; type: "Task" | "Epic" }
+export interface JiraCreateResult { created: JiraCreated[]; failed: { draftId: string; error: string }[] }

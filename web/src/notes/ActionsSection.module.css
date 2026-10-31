@@ -1,0 +1,311 @@
+/* Detected actions under a note's preview. Tokens only.
+   "tab": part of the Preview tab's scroll, after the formatted note.
+   "panel" (ultrawide): pinned under the live preview; its list scrolls inside so the preview keeps
+   most of the height on a short 21:9 screen. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: var(--hairline) solid var(--divider);
+}
+
+.section[data-layout="tab"] {
+  margin-top: var(--space-6);
+}
+
+.section[data-layout="panel"] {
+  flex: 0 1 auto;
+  max-height: 46%;
+  min-height: 0;
+  margin-top: var(--space-2);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.count {
+  min-width: 22px;
+  padding: 0 var(--space-1-5);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-strong);
+  font-size: var(--fs-xs);
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.summary,
+.reason,
+.stale {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.reason {
+  color: var(--text);
+}
+
+.running,
+.runningLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.running {
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--ai-line);
+  border-radius: var(--radius-sm);
+  background: var(--ai-soft);
+}
+
+.running svg,
+.runningLine svg {
+  flex: none;
+  color: var(--ai);
+}
+
+.failure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--danger-line);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.failure[data-kind="not_ready"],
+.failure[data-kind="sign_in"] {
+  border-color: var(--border-strong);
+  background: var(--bg-sunken);
+}
+
+.failure strong {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+}
+
+.flat {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.notice {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.notice strong {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+}
+
+.notice[data-tone="ai"] {
+  border-color: var(--ai-line);
+  background: var(--ai-soft);
+}
+
+.notice[data-tone="warn"] {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+}
+
+.notice[data-tone="danger"] {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+.notice[data-tone="ok"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.noticeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.inlineButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.inlineButton:hover {
+  color: var(--accent-strong);
+}
+
+/* The list ------------------------------------------------------------------------------------- */
+
+.listWrap {
+  min-height: 0;
+}
+
+.section[data-layout="panel"] .listWrap {
+  flex: 0 1 auto;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0 var(--space-2) var(--space-1);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  /* Holds its screen-reader text, so that text never escapes the list's scroll box. */
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.item:hover {
+  background: var(--bg-hover);
+}
+
+.mark {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ring {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+}
+
+.text {
+  min-width: 0;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.item[data-done] .text {
+  color: var(--text-muted);
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border: var(--hairline) solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.key:hover {
+  border-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.key[data-plain] {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.empty {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+
+.empty strong {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+.empty code {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.problem {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.skeleton {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}

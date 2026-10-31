@@ -24,6 +24,10 @@ export interface JiraConfig {
   site: string;
   email: string | null;
   apiToken: string | null;
+  /** JIRA_ACCOUNT_ID: assignee of issues created from notes (ticket T28). Plain config, not a secret. */
+  accountId: string;
+  /** JIRA_PROJECT_KEY: the only project issues are created in (ticket T28). Plain config, not a secret. */
+  projectKey: string;
 }
 
 /** The Claude connector run (ticket T26). No secrets here: the connectors use the claude.ai login. */
@@ -64,6 +68,8 @@ export interface Config {
 export type EnvSource = Record<string, string | undefined>;
 
 export const DEFAULT_JIRA_SITE = "qicbizdev.atlassian.net";
+export const DEFAULT_JIRA_ACCOUNT_ID = "712020:e1e9b601-f708-4c43-84a3-789ac7ef493b";
+export const DEFAULT_JIRA_PROJECT_KEY = "AN";
 
 function clean(value: string | undefined): string | null {
   if (value === undefined) return null;
@@ -97,7 +103,13 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
     return path.resolve(value ? expandHome(value, home) : fallback);
   };
 
-  const jira = { site: clean(env.JIRA_SITE) ?? DEFAULT_JIRA_SITE } as JiraConfig;
+  const accountId = clean(env.JIRA_ACCOUNT_ID);
+  const projectKey = clean(env.JIRA_PROJECT_KEY);
+  const jira = {
+    site: clean(env.JIRA_SITE) ?? DEFAULT_JIRA_SITE,
+    accountId: accountId && /^[A-Za-z0-9:_-]{1,128}$/.test(accountId) ? accountId : DEFAULT_JIRA_ACCOUNT_ID,
+    projectKey: projectKey && /^[A-Z][A-Z0-9]{1,9}$/.test(projectKey) ? projectKey : DEFAULT_JIRA_PROJECT_KEY,
+  } as JiraConfig;
   Object.defineProperty(jira, "email", { value: clean(env.JIRA_EMAIL), enumerable: false });
   Object.defineProperty(jira, "apiToken", { value: clean(env.JIRA_API_TOKEN), enumerable: false });
 
