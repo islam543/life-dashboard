@@ -66,6 +66,8 @@ function task(path: string, due: string | null, start: string | null = null, min
     tags: [],
     excerpt: "",
     openActions: 0,
+    vault: "notes",
+    readOnly: false,
     task: { due, start, minutes, done, source: "me" },
   };
 }

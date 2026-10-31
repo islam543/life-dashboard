@@ -76,10 +76,20 @@ export interface DetectedProject { name: string; kind: "session" | "repo"; minut
 export interface ProjectsState { projects: Project[]; stats: ProjectStats[]; untracked: DetectedProject[]; hidden: string[] }
 
 export interface NoteMeta { path: string; section: string; title: string; created: string; updated: string;
-  projectId: string | null; tags: string[]; excerpt: string; openActions: number }   // openActions = unchecked "- [ ]" lines
+  projectId: string | null; tags: string[]; excerpt: string; openActions: number;   // openActions = unchecked "- [ ]" lines
+  vault: string;        // v1.4: NoteVault id ("notes", "learning", "qic-uw"); path keeps the vault prefix
+  readOnly: boolean }   // v1.4: in a folder the vault's own rules protect: readable, never edited, renamed or deleted
 export interface Note extends NoteMeta { body: string }
-export interface NoteSection { path: string; name: string; children: NoteSection[]; noteCount: number }
-export interface NotesIndex { status: SourceStatus; message?: string; dir: string; sections: NoteSection[]; notes: NoteMeta[] }  // dir = absolute notes folder, shown so the files can be found in Obsidian
+export interface NoteSection { path: string; name: string; children: NoteSection[]; noteCount: number;
+  readOnly?: boolean }  // v1.4: true for protected folders (no new notes, no rename or delete)
+// v1.4: vaults. The default vault ("notes", prefix "") is the dashboard's notes folder, paths unchanged.
+// Other vaults are whole Obsidian vaults whose paths start with their prefix: "@learning/wiki/x.md".
+export interface NoteVault { id: string; label: string; prefix: string; dir: string;   // dir = absolute folder, for Obsidian
+  readOnlyFolders: string[]; noteCount: number }
+export interface NotesIndex { status: SourceStatus; message?: string; dir: string;   // dir = absolute default notes folder
+  vaults: NoteVault[];                                 // v1.4: default first
+  sections: NoteSection[];                             // default vault's sections, then one top section per other vault (path = its prefix without the slash, e.g. "@learning")
+  notes: NoteMeta[] }
 export type NoteTemplate = "blank" | "meeting" | "personal";
 
 // v1.2: schedule, task notes, note actions and Jira drafts (docs/ARCHITECTURE.md "v1.2").

@@ -36,6 +36,8 @@ Open backlog = files at this level. Finished tickets move to `done/`. Plan: `../
 | T30 | Notes task bar, detected actions, Jira review | frontend-developer | contract | 10 | done |
 | T31 | Server: plan placement fix, Do now API and steps | backend-developer | v1.3 contract | 11 | done |
 | T32 | Web: plan placement in Schedule, Do now panel | frontend-developer | v1.3 contract | 11 | done |
+| T33 | Server: multi-vault notes, read-only folders, AI reads vaults | backend-developer | v1.4 contract | 12 | done |
+| T34 | Web: vaults in Notes, choose note destination, read-only notes | frontend-developer | v1.4 contract | 12 | done |
 
 ## Assumptions taken (say if any is wrong)
 

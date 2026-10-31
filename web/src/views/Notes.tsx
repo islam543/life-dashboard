@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { Note, NoteMeta, NotesIndex, NoteTemplate } from "../../../shared/types";
 import { errorMessage } from "../api";
 import { notesApi } from "../api/notes";
@@ -7,22 +16,32 @@ import type { MenuSection } from "../lib/contextMenu";
 import { formatNumber } from "../lib/format";
 import {
   ALL_NOTES,
-  ancestorsOf,
-  defaultNewNoteSection,
+  defaultDestination,
+  filterByTitle,
   findSection,
+  isReadOnlyNote,
+  isReadOnlySection,
+  isVaultRoot,
   isWithin,
   joinPath,
   noteSection,
-  notesIn,
+  notesInScope,
+  openTrail,
   parentPath,
+  placeExists,
+  placeLabel,
+  READ_ONLY_REASON,
   remapPath,
-  sectionCounts,
-  sectionLabel,
+  treeCounts,
+  vaultOfPath,
+  vaultRoot,
+  vaultsOf,
+  type Destination,
 } from "../lib/notes";
 import { noteHash, parseHash } from "../lib/route";
 import { ConfirmDialog } from "../notes/ConfirmDialog";
-import { copyText, fullPath } from "../notes/filePaths";
-import { BackIcon, CopyIcon, PlusIcon, TrashIcon } from "../notes/icons";
+import { copyText, placePath } from "../notes/filePaths";
+import { BackIcon, CopyIcon, PlusIcon, SearchIcon, TrashIcon } from "../notes/icons";
 import { NewNoteDialog } from "../notes/NewNoteDialog";
 import { NoteEditor, type EditorAsk, type EditorHandle } from "../notes/NoteEditor";
 import { NoteList } from "../notes/NoteList";
@@ -55,6 +74,12 @@ export interface NotesProps {
 // note, New meeting note) and the editor (notes/NoteEditor). Link to project and Delete note open the
 // note first, through the same save-before-leaving guard as a click, then move to its Project field
 // or ask with the editor's own delete question.
+//
+// v1.4 vaults: when the server lists `vaults`, the tree groups folders by vault (Working-With-Claude
+// first, with its sections and Tasks), a vault's row lists that vault's notes, New note asks for the
+// vault and folder, and notes in a vault's protected folders open read only. An older server without
+// `vaults` gets exactly the single tree from before. The list has a title filter and renders big
+// folders progressively (NoteList), so a 1,300-note vault opens without a stall.
 
 const PHONE_QUERY = "(max-width: 719px)";
 const VIEW_KEY = "life-dashboard:notes-view";
@@ -69,7 +94,14 @@ interface PendingAsk {
 
 interface ViewMemory {
   selected: string;
+  /** Folders opened in the tree (folders start closed). */
   expanded: string[];
+  /** v1.4: vault rows closed in the tree (vault rows start open). */
+  collapsedVaults: string[];
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
 }
 
 function readViewMemory(): ViewMemory {
@@ -77,16 +109,17 @@ function readViewMemory(): ViewMemory {
     const raw = window.localStorage.getItem(VIEW_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed === "object") {
-      const { selected, expanded } = parsed as Partial<ViewMemory>;
+      const { selected, expanded, collapsedVaults } = parsed as Partial<ViewMemory>;
       return {
         selected: typeof selected === "string" ? selected : ALL_NOTES,
-        expanded: Array.isArray(expanded) ? expanded.filter((x): x is string => typeof x === "string") : [],
+        expanded: strings(expanded),
+        collapsedVaults: strings(collapsedVaults),
       };
     }
   } catch {
     // No storage: start from All notes.
   }
-  return { selected: ALL_NOTES, expanded: [] };
+  return { selected: ALL_NOTES, expanded: [], collapsedVaults: [] };
 }
 
 function writeViewMemory(memory: ViewMemory): void {
@@ -129,9 +162,12 @@ export function Notes({ path }: NotesProps) {
   const [memory] = useState(readViewMemory);
   const [selected, setSelected] = useState(memory.selected);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(memory.expanded));
+  const [collapsedVaults, setCollapsedVaults] = useState<Set<string>>(() => new Set(memory.collapsedVaults));
   const [phonePane, setPhonePane] = useState<"sections" | "notes">("notes");
-  /** The New note form, open for a section and maybe a template; null when closed. */
-  const [newNote, setNewNote] = useState<{ section: string; template: NoteTemplate | null } | null>(null);
+  /** The New note form, open at a destination and maybe with a template; null when closed. */
+  const [newNote, setNewNote] = useState<{ dest: Destination; template: NoteTemplate | null } | null>(null);
+  /** The list's title filter; it clears when another folder opens. */
+  const [query, setQuery] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
   const [leave, setLeave] = useState<{
     href: string;
@@ -161,13 +197,39 @@ export function Notes({ path }: NotesProps) {
   const data = index.data;
   const sections = useMemo(() => data?.sections ?? [], [data]);
   const notes = useMemo(() => data?.notes ?? [], [data]);
-  const counts = useMemo(() => sectionCounts(sections, notes), [sections, notes]);
+  /** v1.4 vaults, default first; null from an older server (today's single tree). */
+  const vaults = useMemo(() => vaultsOf(data), [data]);
+  const counts = useMemo(() => treeCounts(sections, notes, vaults), [sections, notes, vaults]);
 
-  // A section deleted or renamed in Obsidian falls back to All notes.
-  const current = selected !== ALL_NOTES && data && !findSection(sections, selected) ? ALL_NOTES : selected;
-  const listNotes = useMemo(() => notesIn(notes, current), [notes, current]);
+  // A folder deleted or renamed in Obsidian, or a vault whose folder is gone, falls back to the top
+  // row (All notes, or Working-With-Claude with vaults).
+  const current = data && !placeExists(sections, vaults, selected) ? ALL_NOTES : selected;
+  const listNotes = useMemo(() => notesInScope(notes, current, vaults), [notes, current, vaults]);
 
-  useEffect(() => writeViewMemory({ selected: current, expanded: [...expanded] }), [current, expanded]);
+  const [queryFor, setQueryFor] = useState(current);
+  if (queryFor !== current) {
+    // Another folder: the filter starts empty again.
+    setQueryFor(current);
+    setQuery("");
+  }
+  /** Filtering 1,300 titles runs behind the typing, so the box never lags. */
+  const deferredQuery = useDeferredValue(query);
+  const shownNotes = useMemo(() => filterByTitle(listNotes, deferredQuery), [listNotes, deferredQuery]);
+
+  /** True when the open row `scope` lists notes of `section` (a vault's row lists only that vault). */
+  const scopeHolds = useCallback(
+    (scope: string, section: string): boolean => {
+      if (!vaults || !isVaultRoot(scope, vaults)) return isWithin(section, scope);
+      const vault = vaultOfPath(section, vaults);
+      return !!vault && vaultRoot(vault) === scope;
+    },
+    [vaults],
+  );
+
+  useEffect(
+    () => writeViewMemory({ selected: current, expanded: [...expanded], collapsedVaults: [...collapsedVaults] }),
+    [current, expanded, collapsedVaults],
+  );
 
   /* Snapshot: re-read after writes so Needs you and project stats catch up. Saves are frequent, so
      those wait until typing has paused for a few seconds. */
@@ -203,11 +265,16 @@ export function Notes({ path }: NotesProps) {
     if (!path || !data || syncedFor.current === path) return;
     syncedFor.current = path;
     const section = noteSection({ path });
-    if (!findSection(sections, section)) return;
-    if (!isWithin(section, current)) setSelected(section);
-    const open = ancestorsOf(section);
-    if (open.some((p) => !expanded.has(p))) setExpanded((prev) => new Set([...prev, ...open]));
-  }, [path, data, sections, current, expanded]);
+    if (!placeExists(sections, vaults, section)) return;
+    if (!scopeHolds(current, section)) setSelected(section);
+    const trail = openTrail(section, vaults);
+    const roots = trail.filter((p) => isVaultRoot(p, vaults));
+    const folders = trail.filter((p) => !isVaultRoot(p, vaults));
+    if (roots.some((p) => collapsedVaults.has(p))) {
+      setCollapsedVaults((prev) => new Set([...prev].filter((p) => !roots.includes(p))));
+    }
+    if (folders.some((p) => !expanded.has(p))) setExpanded((prev) => new Set([...prev, ...folders]));
+  }, [path, data, sections, vaults, current, expanded, collapsedVaults, scopeHolds]);
 
   // Desktop: the three panes fill the window under the header and scroll inside.
   useLayoutEffect(() => {
@@ -323,15 +390,29 @@ export function Notes({ path }: NotesProps) {
 
   /* Section actions ------------------------------------------------------------------------------ */
 
-  const toggle = useCallback((p: string, open: boolean) => {
-    setExpanded((prev) => {
-      if (prev.has(p) === open) return prev;
-      const next = new Set(prev);
-      if (open) next.add(p);
-      else next.delete(p);
-      return next;
-    });
-  }, []);
+  /** Opens or closes a tree row: a vault's row (kept in collapsedVaults) or a folder (kept in expanded). */
+  const toggle = useCallback(
+    (p: string, open: boolean) => {
+      if (isVaultRoot(p, vaults)) {
+        setCollapsedVaults((prev) => {
+          if (prev.has(p) === !open) return prev;
+          const next = new Set(prev);
+          if (open) next.delete(p);
+          else next.add(p);
+          return next;
+        });
+        return;
+      }
+      setExpanded((prev) => {
+        if (prev.has(p) === open) return prev;
+        const next = new Set(prev);
+        if (open) next.add(p);
+        else next.delete(p);
+        return next;
+      });
+    },
+    [vaults],
+  );
 
   const selectSection = useCallback(
     (p: string) => {
@@ -355,7 +436,7 @@ export function Notes({ path }: NotesProps) {
     } catch (err) {
       return errorMessage(err);
     }
-    if (parent) toggle(parent, true);
+    if (parent || vaults) toggle(parent, true);
     setSelected(joinPath(parent, name));
     return null;
   };
@@ -390,14 +471,15 @@ export function Notes({ path }: NotesProps) {
   };
 
   /**
-   * Opens the New note form, the same one the New note button opens. `section` ALL_NOTES picks the
-   * default section; a template, when given, is picked instead of the section's own.
+   * Opens the New note form, the same one the New note button opens, pointed at the default
+   * destination for the row `section` (a protected folder points at its nearest writable parent).
+   * A template, when given, is picked instead of the folder's own.
    */
   const startNewNote = (section: string, template: NoteTemplate | null = null) => {
-    const target = defaultNewNoteSection(sections, section);
-    if (!target) return;
+    const dest = defaultDestination(sections, vaults, section);
+    if (!dest) return;
     void editorRef.current?.flush();
-    setNewNote({ section: target, template });
+    setNewNote({ dest, template });
   };
 
   /* Note events ---------------------------------------------------------------------------------- */
@@ -417,14 +499,14 @@ export function Notes({ path }: NotesProps) {
     setNewNote(null);
     setJustCreated(note.path);
     const section = noteSection(note);
-    if (!isWithin(section, current)) setSelected(section);
+    if (!scopeHolds(current, section)) setSelected(section);
     refreshSnapshotNow();
     window.location.hash = noteHash(note.path);
   };
 
   const onDeleted = (next: NotesIndex) => {
-    const at = listNotes.findIndex((n) => n.path === path);
-    const neighbour: NoteMeta | undefined = at === -1 ? undefined : (listNotes[at + 1] ?? listNotes[at - 1]);
+    const at = shownNotes.findIndex((n) => n.path === path);
+    const neighbour: NoteMeta | undefined = at === -1 ? undefined : (shownNotes[at + 1] ?? shownNotes[at - 1]);
     focusAfter.current = neighbour?.path ?? null;
     adopt(next);
     refreshSnapshotNow();
@@ -442,12 +524,19 @@ export function Notes({ path }: NotesProps) {
 
   /* Right-click menus ------------------------------------------------------------------------------ */
 
-  const noSections = sections.length === 0;
+  /** Where New note points for the open row; null when no vault has anywhere to write. */
+  const newDest = defaultDestination(sections, vaults, current);
   const noSectionsReason = "Notes live in sections; add one with New section first.";
+  const newNoteTip = vaults
+    ? "Opens a form to name the note and pick its vault, folder and template; it saves as markdown."
+    : "Opens a form to name the note and pick its section and template; it saves as markdown.";
 
   const noteMenu = (note: NoteMeta): MenuSection => {
     const open = note.path === path;
     const dir = data?.dir ?? "";
+    const locked = isReadOnlyNote(note, vaults);
+    const vault = vaultOfPath(note.path, vaults);
+    const trashPlace = vault && vaultRoot(vault) ? `the ${vault.label} vault` : "your notes folder";
     return {
       title: note.title || "Untitled note",
       items: [
@@ -455,20 +544,23 @@ export function Notes({ path }: NotesProps) {
           label: "Open",
           onSelect: () => leaveTo(noteHash(note.path)),
           disabled: open ? "Already open in the editor." : false,
-          tip: "Opens this note in the editor; the note open now saves first.",
+          tip: locked
+            ? "Opens this note to read; the note open now saves first."
+            : "Opens this note in the editor; the note open now saves first.",
         },
         {
           label: note.projectId ? "Change project" : "Link to project",
           onSelect: () => openAndAsk(note.path, "project"),
+          disabled: locked ? READ_ONLY_REASON : false,
           tip: open
             ? "Moves to the note's Project field; picking a project there saves at once."
             : "Opens the note and moves to its Project field; picking a project there saves at once.",
         },
-        dir
+        dir || vault?.dir
           ? {
               label: "Copy path",
               icon: <CopyIcon />,
-              onSelect: () => void copyText(fullPath(dir, note.path)),
+              onSelect: () => void copyText(placePath(note.path, vaults, dir)),
               tip: "Copies the note's full file path, so you can find it in File Explorer or Obsidian.",
             }
           : null,
@@ -477,9 +569,10 @@ export function Notes({ path }: NotesProps) {
           icon: <TrashIcon />,
           danger: true,
           onSelect: () => openAndAsk(note.path, "delete"),
+          disabled: locked ? READ_ONLY_REASON : false,
           tip: open
-            ? "Asks first, then moves the file to .trash in your notes folder; nothing is erased."
-            : "Opens the note and asks first, then moves the file to .trash in your notes folder.",
+            ? `Asks first, then moves the file to .trash in ${trashPlace}; nothing is erased.`
+            : `Opens the note and asks first, then moves the file to .trash in ${trashPlace}.`,
         },
       ],
     };
@@ -488,21 +581,28 @@ export function Notes({ path }: NotesProps) {
   const listMenu = useMenuRegion((): MenuSection | null => {
     if (!data || data.status !== "ok") return null;
     return {
-      title: sectionLabel(current),
+      title: placeLabel(current, vaults),
       items: [
         {
           label: "New note",
           icon: <PlusIcon />,
           onSelect: () => startNewNote(current),
-          disabled: noSections ? noSectionsReason : false,
-          tip: "Opens a form to name the note and pick its section and template; it saves as markdown.",
+          disabled: newDest ? false : noSectionsReason,
+          tip: newNoteTip,
         },
         {
           label: "New meeting note",
           onSelect: () => startNewNote(current, "meeting"),
-          disabled: noSections ? noSectionsReason : false,
+          disabled: newDest ? false : noSectionsReason,
           tip: "Opens the new note form with the Meeting template picked.",
         },
+        query
+          ? {
+              label: "Clear filter",
+              onSelect: () => setQuery(""),
+              tip: "Clears the title filter and shows every note here again.",
+            }
+          : null,
       ],
     };
   });
@@ -561,8 +661,13 @@ export function Notes({ path }: NotesProps) {
   }
 
   const pane = path ? "editor" : phonePane;
-  const newSection = defaultNewNoteSection(sections, current);
   const total = counts.get(current)?.total ?? listNotes.length;
+  const filtering = query.trim() !== "";
+  const label = placeLabel(current, vaults);
+  const currentVault = vaultOfPath(current, vaults);
+  const inOtherVault = !!currentVault && vaultRoot(currentVault) !== "";
+  const currentSection = findSection(sections, current);
+  const currentLocked = !!currentSection && isReadOnlySection(currentSection, vaults);
   const refreshNotice = index.error
     ? `Couldn't refresh the notes list${index.offline ? " because the server isn't reachable" : ""}. Showing what loaded earlier.`
     : undefined;
@@ -574,13 +679,15 @@ export function Notes({ path }: NotesProps) {
       size="sm"
       icon={<PlusIcon />}
       onClick={() => startNewNote(current)}
-      aria-disabled={newSection ? undefined : true}
-      aria-describedby={newSection ? undefined : "notes-new-reason"}
-      className={newSection ? undefined : styles.inactive}
+      aria-disabled={newDest ? undefined : true}
+      aria-describedby={newDest ? undefined : "notes-new-reason"}
+      className={newDest ? undefined : styles.inactive}
       tip={
-        newSection
-          ? "Opens a form to name the note and pick its section and template; it saves as markdown."
-          : "Does nothing yet because notes live in sections; add one with New section first."
+        !newDest
+          ? "Does nothing yet because notes live in sections; add one with New section first."
+          : currentLocked
+            ? `Opens the new note form at ${placeLabel(newDest.folder, vaults)}, since this folder is protected.`
+            : newNoteTip
       }
     >
       New note
@@ -588,7 +695,7 @@ export function Notes({ path }: NotesProps) {
   );
 
   let listBody;
-  if (sections.length === 0 && notes.length === 0) {
+  if (sections.length === 0 && notes.length === 0 && !newDest) {
     listBody = (
       <EmptyState
         title="No sections yet."
@@ -601,21 +708,72 @@ export function Notes({ path }: NotesProps) {
       />
     );
   } else if (listNotes.length === 0) {
+    const where = current === ALL_NOTES && !vaults ? null : (currentSection?.name ?? label);
     listBody = (
       <EmptyState
-        title={current === ALL_NOTES ? "No notes yet." : `No notes in ${findSection(sections, current)?.name ?? "this section"} yet.`}
+        title={where ? `No notes in ${where} yet.` : "No notes yet."}
         body={
-          current === ALL_NOTES
-            ? "Start one with New note. Each note is saved as a markdown file in your notes folder, so Obsidian sees it too."
-            : "Start one with New note. Each note is saved as a markdown file in this section's folder, so Obsidian sees it too."
+          currentLocked
+            ? "This folder is protected by the vault's rules, so new notes can't go here. Notes added in Obsidian show up here."
+            : current === ALL_NOTES
+              ? "Start one with New note. Each note is saved as a markdown file in your notes folder, so Obsidian sees it too."
+              : inOtherVault
+                ? "Start one with New note. Each note is saved as a markdown file in this vault's folder, so Obsidian sees it too."
+                : "Start one with New note. Each note is saved as a markdown file in this section's folder, so Obsidian sees it too."
+        }
+      />
+    );
+  } else if (shownNotes.length === 0) {
+    listBody = (
+      <EmptyState
+        title={`No titles here match "${deferredQuery.trim()}".`}
+        body="The filter looks at note titles only. Try fewer or shorter words, or clear it."
+        action={
+          <Button size="sm" onClick={() => setQuery("")} tip="Clears the title filter and shows every note here again.">
+            Clear filter
+          </Button>
         }
       />
     );
   } else {
     listBody = (
-      <NoteList notes={listNotes} section={current} openPath={path} projects={projects.projects} menuFor={noteMenu} />
+      <NoteList
+        notes={shownNotes}
+        section={current}
+        vaults={vaults}
+        openPath={path}
+        projects={projects.projects}
+        menuFor={noteMenu}
+        resetKey={`${current}\u0000${deferredQuery}`}
+      />
     );
   }
+
+  const filterBox =
+    listNotes.length > 0 ? (
+      <div className={styles.filter} role="search">
+        <SearchIcon />
+        <input
+          type="search"
+          className={styles.filterInput}
+          value={query}
+          dir="auto"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Filter by title"
+          aria-label={`Filter the notes in ${label} by title`}
+          data-tip="Shows only the notes whose title has every word you type; Esc clears it."
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && query) {
+              e.preventDefault();
+              e.stopPropagation();
+              setQuery("");
+            }
+          }}
+        />
+      </div>
+    ) : null;
 
   return (
     <>
@@ -626,13 +784,15 @@ export function Notes({ path }: NotesProps) {
         style={top !== null ? ({ "--notes-top": `${top}px` } as CSSProperties) : undefined}
       >
         <div className={styles.treePane}>
-          <Panel title="Sections" state="ok" className={styles.fill} bodyClassName={styles.fillBody}>
+          <Panel title={vaults ? "Vaults" : "Sections"} state="ok" className={styles.fill} bodyClassName={styles.fillBody}>
             <SectionTree
               ref={treeRef}
               sections={sections}
+              vaults={vaults}
               counts={counts}
               selected={current}
               expanded={expanded}
+              collapsedVaults={collapsedVaults}
               notesDir={data.dir}
               onToggle={toggle}
               onSelect={selectSection}
@@ -655,23 +815,28 @@ export function Notes({ path }: NotesProps) {
                   setPhonePane("sections");
                   pendingFocus.current = () => treeRef.current?.focusSelected();
                 }}
-                data-tip="Shows the section tree, so you can open another section's notes."
+                data-tip={
+                  vaults
+                    ? "Shows the vaults and folders, so you can open another folder's notes."
+                    : "Shows the section tree, so you can open another section's notes."
+                }
               >
                 <BackIcon />
-                Sections
+                {vaults ? "Vaults" : "Sections"}
               </button>
             </div>
           ) : null}
           <Panel
-            title={sectionLabel(current)}
+            title={label}
             state="ok"
-            meta={formatNumber(total)}
+            meta={filtering ? `${formatNumber(shownNotes.length)} of ${formatNumber(total)}` : formatNumber(total)}
             action={newNoteButton}
             notice={refreshNotice}
             className={styles.fill}
-            bodyClassName={styles.scrollBody}
+            bodyClassName={styles.listBody}
           >
-            {listBody}
+            {filterBox}
+            <div className={styles.listScroll}>{listBody}</div>
           </Panel>
         </div>
 
@@ -685,7 +850,7 @@ export function Notes({ path }: NotesProps) {
                 data-tip="Returns to the notes list; the open note saves first."
               >
                 <BackIcon />
-                <span dir="auto">{sectionLabel(current)}</span>
+                <span dir="auto">{label}</span>
               </a>
             </div>
           ) : null}
@@ -695,6 +860,7 @@ export function Notes({ path }: NotesProps) {
               path={path}
               projects={projects}
               notesDir={data.dir}
+              vaults={vaults}
               autoFocusBody={justCreated === path}
               onSaved={onSaved}
               onDeleted={onDeleted}
@@ -723,8 +889,10 @@ export function Notes({ path }: NotesProps) {
       <NewNoteDialog
         open={newNote !== null}
         sections={sections}
-        initialSection={newNote?.section ?? newSection ?? ""}
+        vaults={vaults}
+        initial={newNote?.dest ?? newDest}
         initialTemplate={newNote?.template}
+        onCreateFolder={createSection}
         onCancel={() => setNewNote(null)}
         onCreated={onCreated}
       />

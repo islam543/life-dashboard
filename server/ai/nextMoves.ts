@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { NextMove, NextMovesFile, Snapshot } from "../../shared/types";
-import { config } from "../config";
+import { config, presentVaults, type VaultConfig } from "../config";
 import { normaliseSnapshot } from "../snapshot";
 import { createStore, FILES, type Store } from "../store";
 import { createNotesStore } from "../notes";
@@ -188,8 +188,16 @@ export function childEnv(source: NodeJS.ProcessEnv = process.env): Record<string
   return env;
 }
 
-/** `claude -p <prompt> --output-format json --model sonnet`, plus read-only hardening. */
-export function claudeArgs(prompt: string): string[] {
+/** `--add-dir <folder>...` so a run may read those folders too, or nothing when there are none. */
+export function addDirArgs(dirs: readonly string[]): string[] {
+  return dirs.length > 0 ? ["--add-dir", ...dirs] : [];
+}
+
+/**
+ * `claude -p <prompt> --output-format json --model sonnet`, plus read-only hardening. `vaultDirs`
+ * (v1.4): the extra note vaults, readable as reference next to the knowledge vault (the cwd).
+ */
+export function claudeArgs(prompt: string, vaultDirs: readonly string[] = []): string[] {
   return [
     "-p",
     prompt,
@@ -200,6 +208,7 @@ export function claudeArgs(prompt: string): string[] {
     // Work item titles come from other people: keep the run read-only and free of MCP servers.
     "--tools",
     ...ALLOWED_TOOLS,
+    ...addDirArgs(vaultDirs),
     "--disallowedTools",
     ...BLOCKED_TOOLS,
     "--strict-mcp-config",
@@ -300,6 +309,11 @@ export interface NextMovesDeps {
   store: Store;
   /** cwd for the CLI (the knowledge vault). */
   vaultDir: string;
+  /**
+   * v1.4: the other note vaults (not the default one, which sits inside vaultDir). Those whose folder
+   * exists at run time are named in the prompt as read-only reference and passed with --add-dir.
+   */
+  vaults?: readonly VaultConfig[];
   /** Latest snapshot. Default reads data/snapshot.json, which the snapshot service saves after every refresh. */
   loadSnapshot?: (now: Date) => Promise<Snapshot>;
   /** Open "- [ ]" lines for the given note paths. Default: none, so the prompt only has each note's count. */
@@ -371,17 +385,19 @@ export function createNextMoves(deps: NextMovesDeps): NextMovesService {
       const recent = pruneHistory(history, startedAt);
       const actionPaths = snapshot.notes.recent.filter((n) => n.openActions > 0).map((n) => n.path).slice(0, 10);
       const noteActions = deps.loadNoteActions && actionPaths.length ? await deps.loadNoteActions(actionPaths).catch(() => ({})) : {};
+      const vaults = presentVaults(deps.vaults ?? []).filter((v) => path.resolve(v.dir) !== path.resolve(deps.vaultDir));
       const built = buildPrompt({
         snapshot,
         noteActions,
         now: startedAt,
         recentlyDismissed: recent.dismissed.map((e) => e.title),
         recentlyDone: recent.done.map((e) => e.title),
+        vaults: vaults.map((v) => ({ label: v.label, dir: v.dir })),
       });
       allowedUrls = knownUrls(built.trimmed);
       const result = await runner({
         command: deps.command ?? "claude",
-        args: claudeArgs(built.prompt),
+        args: claudeArgs(built.prompt, vaults.map((v) => v.dir)),
         cwd: deps.vaultDir,
         env: deps.env ?? childEnv(),
         timeoutMs,
@@ -486,8 +502,9 @@ function service(): NextMovesService {
   defaultService ??= createNextMoves({
     store: createStore(config.dataDir),
     vaultDir: config.vaultDir,
+    vaults: config.vaults.filter((v) => v.prefix !== ""),
     command: resolveClaudeCommand(config.home),
-    loadNoteActions: (paths) => openActionLines(createNotesStore(config.notesDir), paths),
+    loadNoteActions: (paths) => openActionLines(createNotesStore(config.notesDir, { vaults: config.vaults }), paths),
   });
   return defaultService;
 }

@@ -120,3 +120,13 @@ describe("writeBackFailure", () => {
     expect(writeBackFailure({ status: "none" }, [])).toBeNull();
   });
 });
+
+describe("writeBackFailure for protected notes", () => {
+  it("lists the created keys without telling Islam to edit a protected note", () => {
+    const error = writeBackFailure({ status: "error", reason: "This folder is protected by the vault's rules" }, [
+      { actionId: "a", line: 2, key: "AN-4700" },
+    ])?.error;
+    expect(error).toBe("Created in Jira: AN-4700. This note is in a protected folder, so the keys were not written into it.");
+    expect(error).not.toMatch(/by hand/);
+  });
+});

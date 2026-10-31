@@ -42,7 +42,7 @@ describe("time helpers", () => {
 describe("busyBlocks", () => {
   const task = (due: string | null, start: string | null, minutes: number | null, done = false): TaskNote => ({
     path: `Tasks/${due}-${start}.md`, section: "Tasks", title: "t", created: "", updated: "", projectId: null, tags: [], excerpt: "",
-    openActions: 0, task: { due, start, minutes, done, source: "me" },
+    openActions: 0, vault: "notes", readOnly: false, task: { due, start, minutes, done, source: "me" },
   });
   const event = (start: string, end: string): CalendarEvent => ({ id: start, title: "m", start, end });
 

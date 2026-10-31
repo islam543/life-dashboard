@@ -617,3 +617,90 @@
     outline-offset: -2px;
   }
 }
+
+/* Read-only notes (v1.4) ------------------------------------------------------------------------- */
+
+.status[data-kind="readonly"] {
+  color: var(--text-muted);
+}
+
+.banner[data-tone="lock"] {
+  border-color: var(--border-strong);
+  background: var(--bg-sunken);
+}
+
+.banner[data-tone="lock"] .bannerIcon {
+  color: var(--text-muted);
+}
+
+.readTitle {
+  color: var(--text-strong);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.readMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-5);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.readMetaItem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.readMetaItem dt {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.readMetaItem dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* The formatted note, scrolling inside its box like the Preview tab. */
+.readBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 240px;
+  padding: var(--space-3) var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-md);
+}
+
+.readBody:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+@media (max-width: 719px) {
+  .readBody {
+    flex: none;
+  }
+}
+
+/* Ultrawide: the read-only note keeps the 75-character column, centred like the live preview. */
+@media (min-width: 1920px) {
+  .editor[data-readonly] {
+    width: 100%;
+    max-inline-size: calc(75ch + 2 * var(--space-4) + 2 * var(--hairline));
+    margin-inline: auto;
+  }
+}

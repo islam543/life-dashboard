@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,6 +46,33 @@ export interface ConnectorsConfig {
 
 export const DEFAULT_CONNECTORS_EVERY_MIN = 60;
 
+/**
+ * One notes vault (docs/ARCHITECTURE.md "v1.4"). The default vault is the dashboard's notes folder
+ * (id "notes", prefix ""); the others are whole Obsidian vaults whose note paths start with their
+ * prefix ("@learning/wiki/x.md"). Read and written only through server/notes.ts.
+ */
+export interface VaultConfig {
+  /** "notes", "learning", "qic-uw". */
+  id: string;
+  label: string;
+  /** "" for the default vault, else "@<id>/". */
+  prefix: string;
+  /** Absolute folder. It may be missing: the notes store then leaves the vault out and logs it. */
+  dir: string;
+  /**
+   * Folders (relative to `dir`, posix, no trailing slash) that the vault's own CLAUDE.md protects:
+   * their notes are listed and readable, never created, edited, renamed, moved or deleted.
+   */
+  readOnlyFolders: string[];
+}
+
+export const DEFAULT_VAULT_ID = "notes";
+export const DEFAULT_VAULT_LABEL = "Working-With-Claude notes";
+/** Learning/CLAUDE.md: raw/ is immutable. */
+export const LEARNING_READ_ONLY = ["raw"] as const;
+/** QIC_Underwriting_Agent/CLAUDE.md: sources/ and project/P&C/docs/ are immutable. */
+export const QIC_UW_READ_ONLY = ["sources", "project/P&C/docs"] as const;
+
 export interface Config {
   host: string;
   port: number;
@@ -65,6 +92,11 @@ export interface Config {
    * default VAULT_DIR/notes so Obsidian sees them. Read and written only through server/notes.ts.
    */
   notesDir: string;
+  /**
+   * v1.4: every notes vault, default first: notes (NOTES_DIR), learning (LEARNING_DIR) and qic-uw
+   * (QIC_UW_DIR, default Desktop/MD Files/QIC_Underwriting_Agent). Folders are not checked here.
+   */
+  vaults: VaultConfig[];
   /** Claude Code session logs, one folder per project. */
   claudeProjectsDir: string;
   jira: JiraConfig;
@@ -136,8 +168,22 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
   Object.defineProperty(jira, "email", { value: clean(env.JIRA_EMAIL), enumerable: false });
   Object.defineProperty(jira, "apiToken", { value: clean(env.JIRA_API_TOKEN), enumerable: false });
 
-  const vaultDir = dir("VAULT_DIR", path.join(home, "Desktop", "MD Files", "Working-With-Claude"));
+  const mdFiles = path.join(home, "Desktop", "MD Files");
+  const vaultDir = dir("VAULT_DIR", path.join(mdFiles, "Working-With-Claude"));
   const dataDir = path.join(rootDir, "data");
+  const learningDir = dir("LEARNING_DIR", path.join(mdFiles, "Learning"));
+  const notesDir = dir("NOTES_DIR", path.join(vaultDir, "notes"));
+  const vaults: VaultConfig[] = [
+    { id: DEFAULT_VAULT_ID, label: DEFAULT_VAULT_LABEL, prefix: "", dir: notesDir, readOnlyFolders: [] },
+    { id: "learning", label: "Learning", prefix: "@learning/", dir: learningDir, readOnlyFolders: [...LEARNING_READ_ONLY] },
+    {
+      id: "qic-uw",
+      label: "QIC Underwriting Agent",
+      prefix: "@qic-uw/",
+      dir: dir("QIC_UW_DIR", path.join(mdFiles, "QIC_Underwriting_Agent")),
+      readOnlyFolders: [...QIC_UW_READ_ONLY],
+    },
+  ];
 
   return {
     host: HOST,
@@ -147,9 +193,10 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
     dataDir,
     webDistDir: path.join(rootDir, "web", "dist"),
     home,
-    learningDir: dir("LEARNING_DIR", path.join(home, "Desktop", "MD Files", "Learning")),
+    learningDir,
     vaultDir,
-    notesDir: dir("NOTES_DIR", path.join(vaultDir, "notes")),
+    notesDir,
+    vaults,
     claudeProjectsDir: dir("CLAUDE_PROJECTS_DIR", path.join(home, ".claude", "projects")),
     jira,
     connectors: {
@@ -157,6 +204,22 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
       runDir: path.join(dataDir, "connector-run"),
     },
   };
+}
+
+function isDirectorySync(dir: string): boolean {
+  try {
+    return statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The vaults whose folder exists right now, in order. The AI runs give these to `claude --add-dir`
+ * (read-only reference), so a vault deleted or not on this PC is simply left out.
+ */
+export function presentVaults(vaults: readonly VaultConfig[], isDir: (dir: string) => boolean = isDirectorySync): VaultConfig[] {
+  return vaults.filter((v) => isDir(v.dir));
 }
 
 /**

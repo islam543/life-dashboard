@@ -376,3 +376,38 @@ each with a step-by-step how-to written by AI. Time by project (week/month bars)
 - Cache: `data/taskSteps.json`, keyed by task path plus the note's `updated` time, so editing the task
   regenerates. After GET, the server fills missing steps for the top 3 items in the background, in one
   batched run (single-flight); GET returns `stepsStatus: "pending"` meanwhile. `force` regenerates one.
+
+## v1.4: More vaults in Notes, choosing where a note goes, AI reads all vaults
+
+Request (Islam, 2026-10-31): add the Learning and QIC_Underwriting_Agent vaults, choose where a new note
+goes, and let the AI read the notes of all vaults.
+
+### Vaults
+| id | label | folder (config, env override) | prefix | read-only folders (the vault's own CLAUDE.md rules) |
+|---|---|---|---|---|
+| `notes` | Working-With-Claude notes | `NOTES_DIR` (default VAULT_DIR/notes) | `""` | none |
+| `learning` | Learning | `LEARNING_DIR` (Desktop/MD Files/Learning) | `@learning/` | `raw/` |
+| `qic-uw` | QIC Underwriting Agent | `QIC_UW_DIR` (Desktop/MD Files/QIC_Underwriting_Agent) | `@qic-uw/` | `sources/`, `project/P&C/docs/` |
+
+- A vault whose folder is missing is left out with a log line, never an error.
+- Never listed: dot folders (`.obsidian`, `.claude`, `.trash`, `.remember`, ...), `Excalidraw/`,
+  `*.excalidraw.md`, non-`.md` files, symlinks and junctions (same real-path confinement as today, per vault).
+- Paths: the default vault keeps today's paths (`Meeting notes/a.md`), so tasks, project links, Jira
+  write-back and `#/notes/...` URLs keep working. Other vaults: `@learning/wiki/ai-engineering/x.md`.
+  A prefix may never be crossed: `@learning/../..` and paths outside the vault's real folder are refused.
+- Read-only: notes and folders under a vault's read-only folders are listed and readable, but create,
+  update, rename, move and delete are refused (403 with "This folder is protected by the vault's rules").
+  Jira write-back into a read-only note fails with that message (keys still returned).
+- Trash: deleting a note moves it to `<vault>/.trash/<relative path>` (Obsidian's own trash folder).
+- Tasks stay in the default vault's `Tasks` section. Templates work in every vault.
+- Index: one combined NotesIndex (`vaults`, `sections`, `notes`); the existing mtime cache per file keeps
+  ~1,500 notes cheap. The snapshot's recent notes and needs-you rules cover every vault.
+
+### AI reads all vaults
+- Next moves: keeps Read, Glob, Grep; adds `--add-dir` for each extra vault folder; the prompt says where
+  each vault is and that they are read-only reference.
+- Do now steps: gains Read, Glob, Grep (read-only, same blocked list) plus `--add-dir` for all vault
+  folders, so steps can draw on the relevant notes; output rules unchanged (no markdown, no URLs).
+- Jira draft: gains Read, Glob, Grep plus `--add-dir` alongside the Jira search tool, to pull project
+  context. The create run is unchanged (only createJiraIssue).
+- The day plan run stays tool-free.

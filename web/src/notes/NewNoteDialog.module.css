@@ -1,7 +1,7 @@
 /* New note dialog. Tokens only. */
 
 .dialog {
-  width: min(520px, calc(100vw - 2 * var(--space-4)));
+  width: min(560px, calc(100vw - 2 * var(--space-4)));
   max-width: none;
   max-height: calc(100dvh - 2 * var(--space-4));
   margin: auto;
@@ -193,6 +193,172 @@
   color: var(--danger);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
+}
+
+/* Folder picker (v1.4): a search box over an always-open list of the vault's folders. */
+
+.picker {
+  display: grid;
+  min-width: 0;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search > svg {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: var(--space-10);
+  padding: 0 var(--space-3) 0 var(--space-8);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  text-align: start;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.searchInput::placeholder {
+  color: var(--text-faint);
+}
+
+.searchInput:hover {
+  border-color: var(--accent-line);
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.folders {
+  max-height: calc(var(--target-min) * 6);
+  margin: 0;
+  padding: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: var(--hairline) solid var(--border-strong);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--bg-sunken);
+}
+
+.option {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0;
+  min-height: var(--target-min);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--bg-hover);
+}
+
+.option[aria-selected="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* The folder a new folder will go into. */
+.option[data-parent] {
+  box-shadow: inset 2px 0 0 var(--accent-line);
+}
+
+.optionPath {
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.optionName {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+}
+
+.noMatch {
+  padding: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.newFolder {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-1-5);
+  min-height: var(--target-min);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.newFolder:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.newFolder[data-inactive] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.newFolder[data-inactive]:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.newFolderRow {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.newFolderLabel {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.newFolderInputs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dest {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.destPath {
+  color: var(--text-strong);
 }
 
 .actions {

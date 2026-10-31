@@ -13,7 +13,7 @@ const task = (
   opts: { start?: string; minutes?: number; done?: boolean; created?: string } = {},
 ): TaskNote => ({
   path: `Tasks/${title}.md`, section: "Tasks", title, created: opts.created ?? "2026-10-30T09:00:00+03:00", updated: "2026-10-30T09:00:00+03:00",
-  projectId: null, tags: [], excerpt: "", openActions: 0,
+  projectId: null, tags: [], excerpt: "", openActions: 0, vault: "notes", readOnly: false,
   task: { due, start: opts.start ?? null, minutes: opts.minutes ?? null, done: opts.done ?? false, source: "me" },
 });
 const view = (picks: ReturnType<typeof pickFocus>) => picks.map((p) => [p.task.title, p.reason, p.label]);

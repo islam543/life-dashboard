@@ -18,7 +18,7 @@ import {
 function task(name: string, t: Partial<TaskInfo> = {}, created = "2026-10-30T09:00:00+03:00"): TaskNote {
   return {
     path: `Tasks/${name}.md`, section: "Tasks", title: name, created, updated: created, projectId: null, tags: [],
-    excerpt: "", openActions: 0,
+    excerpt: "", openActions: 0, vault: "notes", readOnly: false,
     task: { due: null, start: null, minutes: null, done: false, source: "me", ...t },
   };
 }

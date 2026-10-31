@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { copyText, fullPath } from "./filePaths";
+import type { NoteVault } from "../../../shared/types";
+import { copyText, fullPath, placePath } from "./filePaths";
 
 describe("fullPath", () => {
   it("joins a Windows notes folder with backslashes", () => {
@@ -40,5 +41,26 @@ describe("fullPath", () => {
 describe("copyText", () => {
   it("resolves false when there is no clipboard", async () => {
     expect(await copyText("x")).toBe(false);
+  });
+});
+
+describe("placePath", () => {
+  const vaults: NoteVault[] = [
+    { id: "notes", label: "Working-With-Claude notes", prefix: "", dir: "C:\\MD\\WWC\\notes", readOnlyFolders: [], noteCount: 3 },
+    { id: "learning", label: "Learning", prefix: "@learning/", dir: "C:\\MD\\Learning", readOnlyFolders: ["raw"], noteCount: 2 },
+  ];
+
+  it("joins another vault's path onto that vault's folder, without the prefix", () => {
+    expect(placePath("@learning/wiki/rag notes.md", vaults, "C:\\MD\\WWC\\notes")).toBe("C:\\MD\\Learning\\wiki\\rag notes.md");
+    expect(placePath("@learning", vaults, "C:\\MD\\WWC\\notes")).toBe("C:\\MD\\Learning");
+  });
+
+  it("keeps the default vault's paths as before", () => {
+    expect(placePath("Meeting notes/a.md", vaults, "C:\\other")).toBe("C:\\MD\\WWC\\notes\\Meeting notes\\a.md");
+    expect(placePath("", vaults, "C:\\other")).toBe("C:\\MD\\WWC\\notes");
+  });
+
+  it("falls back to the notes folder without vaults", () => {
+    expect(placePath("Tasks/x.md", null, "/vault/notes")).toBe("/vault/notes/Tasks/x.md");
   });
 });

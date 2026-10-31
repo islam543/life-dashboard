@@ -40,7 +40,7 @@ const taskNote = (
   opts: { start?: string; minutes?: number; done?: boolean; projectId?: string; created?: string } = {},
 ): TaskNote => ({
   path: `Tasks/${title}.md`, section: "Tasks", title, created: opts.created ?? "2026-10-30T09:00:00+03:00", updated: "2026-10-30T09:00:00+03:00",
-  projectId: opts.projectId ?? null, tags: [], excerpt: "", openActions: 0,
+  projectId: opts.projectId ?? null, tags: [], excerpt: "", openActions: 0, vault: "notes", readOnly: false,
   task: { due, start: opts.start ?? null, minutes: opts.minutes ?? null, done: opts.done ?? false, source: "me" },
 });
 const meeting = (id: string, title: string, start: string, end: string): CalendarEvent => ({ id, title, start, end });

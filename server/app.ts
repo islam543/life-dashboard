@@ -34,7 +34,7 @@ export interface AppDeps {
   /** data/ store for projects.json. Default: createStore(config.dataDir). */
   store?: Store;
   /**
-   * Notes store for /api/notes. Default: createNotesStore(config.notesDir). Pass the same instance
+   * Notes store for /api/notes. Default: createNotesStore(config.notesDir, { vaults: config.vaults }). Pass the same instance
    * the snapshot service uses when you can, so one mtime cache serves both.
    */
   notes?: NotesStore;
@@ -189,7 +189,7 @@ export function createApp(deps: AppDeps): Hono {
   // Sec-Fetch-Site checks, no-store and the body limits. Their errors reach onError below.
   const snapshots = deps.snapshots;
   const store = deps.store ?? createStore(config.dataDir);
-  const notes = deps.notes ?? createNotesStore(config.notesDir);
+  const notes = deps.notes ?? createNotesStore(config.notesDir, { vaults: config.vaults });
   app.route("/api/projects", projectsRoutes({ store, snapshots, now, log }));
   app.route("/api/notes", notesRoutes({ notes, snapshots, now, log }));
   // v1.2 routers (tickets T27, T28): same guards, same shared notes store.

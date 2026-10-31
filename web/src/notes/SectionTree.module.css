@@ -64,6 +64,40 @@
   margin-bottom: var(--space-1);
 }
 
+/* v1.4: one row per vault heads its folders. A little air above each vault after the first. */
+.item[data-kind="vault"] {
+  font-weight: var(--fw-medium);
+  color: var(--text-strong);
+}
+
+.item[data-kind="vault"] ~ .item[data-kind="vault"] {
+  margin-top: var(--space-2);
+}
+
+.vaultIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--accent);
+}
+
+.vaultIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* A protected folder: readable, never written to. */
+.lock {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.item[aria-selected="true"] .lock {
+  color: var(--text);
+}
+
 .twisty {
   display: grid;
   place-items: center;
@@ -228,6 +262,12 @@
 
 .reason {
   color: var(--text-muted);
+}
+
+.reasonLock {
+  display: inline-grid;
+  vertical-align: -2px;
+  margin-right: var(--space-1);
 }
 
 .error {

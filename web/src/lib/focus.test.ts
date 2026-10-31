@@ -31,6 +31,8 @@ function task(path: string, extra: Partial<TaskNote["task"]> = {}): TaskNote {
     tags: [],
     excerpt: "",
     openActions: 0,
+    vault: "notes",
+    readOnly: false,
     task: { due: TODAY, start: null, minutes: null, done: false, source: "me", ...extra },
   };
 }

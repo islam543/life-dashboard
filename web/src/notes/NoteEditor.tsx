@@ -11,18 +11,24 @@ import {
   type Ref,
   type RefObject,
 } from "react";
-import type { Note, NotesIndex, Project, ProjectStatus } from "../../../shared/types";
+import type { Note, NotesIndex, NoteVault, Project, ProjectStatus } from "../../../shared/types";
 import { notesApi } from "../api/notes";
 import type { MenuSection } from "../lib/contextMenu";
+import { formatNumber } from "../lib/format";
 import {
   byteLength,
   formatNoteDate,
   initialCaret,
+  isProtectedPath,
+  isReadOnlyNote,
   MAX_BODY_BYTES,
   noteSection,
-  sectionLabel,
+  placeLabel,
+  READ_ONLY_REASON,
   toggleTaskLine,
   validateTitle,
+  vaultOfPath,
+  vaultRoot,
 } from "../lib/notes";
 import { Button, Spinner } from "../ui/Button";
 import { useMenuRegion } from "../ui/ContextMenu";
@@ -32,8 +38,8 @@ import { Skeleton } from "../ui/Skeleton";
 import { StatusDot } from "../ui/StatusDot";
 import { ActionsSection, useNoteJira } from "./ActionsSection";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { copyText, fullPath } from "./filePaths";
-import { CheckIcon, CopyIcon, TrashIcon, WarnIcon } from "./icons";
+import { copyText, placePath } from "./filePaths";
+import { CheckIcon, CopyIcon, LockIcon, TrashIcon, WarnIcon } from "./icons";
 import { JiraReviewDialog } from "./JiraReviewDialog";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { TagInput } from "./TagInput";
@@ -53,6 +59,12 @@ import styles from "./NoteEditor.module.css";
 // A note in the Tasks section gets a task bar under its title (day, start, length, Done). Under the
 // preview (the Preview tab, or the live Preview panel on ultrawide) every note lists its detected
 // actions, with "Draft Jira tasks with AI" and the review dialog (ActionsSection, JiraReviewDialog).
+//
+// v1.4 read-only notes (a vault's protected folders): the formatted note only, under a "Read only"
+// bar. No title or text editing, no project or tags, no task bar, no delete; task boxes can't be
+// ticked. Detected actions and Jira drafts still work (the server then can't write the keys back,
+// and the outcome says so). On ultrawide the note fills the first panel and the actions the second,
+// so the view keeps its four panes.
 
 /** Something the Notes view asks the editor to do once the note has loaded (from the notes list menu). */
 export type EditorAsk = "project" | "delete";
@@ -70,6 +82,8 @@ export interface NoteEditorProps {
   projects: ProjectOptions;
   /** Absolute notes folder, for the delete message. */
   notesDir: string;
+  /** v1.4 vaults (labels, file paths, read-only rules); null for an older server. */
+  vaults?: NoteVault[] | null;
   /** Put the caret in the body once loaded (a note just created). */
   autoFocusBody: boolean;
   onSaved: (note: Note) => void;
@@ -299,12 +313,14 @@ function FailureBanner({
         <span>
           <strong>Not saved.</strong> {problem.message}{" "}
           {retryable ? "Your text is kept in this browser and saving retries by itself." : null}
-          {problem.kind === "gone" ? "Your text is still here and kept in this browser." : null}
+          {problem.kind === "gone" || problem.kind === "forbidden"
+            ? "Your text is still here and kept in this browser; copy it to keep it elsewhere."
+            : null}
         </span>
       </p>
       {error ? <p className={styles.bannerText}>Couldn't create the new note. {error}</p> : null}
       <div className={styles.bannerActions}>
-        {problem.kind === "gone" ? (
+        {problem.kind === "forbidden" ? null : problem.kind === "gone" ? (
           <Button
             size="sm"
             variant="primary"
@@ -330,7 +346,7 @@ function FailureBanner({
             {retryable ? "Retry now" : "Try again"}
           </Button>
         ) : null}
-        {problem.kind === "gone" || problem.kind === "too_large" ? (
+        {problem.kind === "gone" || problem.kind === "too_large" || problem.kind === "forbidden" ? (
           <Button
             size="sm"
             variant="ghost"
@@ -350,6 +366,7 @@ export function NoteEditor({
   path,
   projects,
   notesDir,
+  vaults = null,
   autoFocusBody,
   onSaved,
   onDeleted,
@@ -359,6 +376,11 @@ export function NoteEditor({
   onAskDone,
 }: NoteEditorProps) {
   const doc = useNoteDocument(path, onSaved);
+  /** A note in a protected folder (v1.4): shown, never changed. The server's flag, else the vault's rules. */
+  const readOnly = doc.note ? isReadOnlyNote(doc.note, vaults) : isProtectedPath(path, vaults);
+  const vault = vaultOfPath(path, vaults);
+  /** Where a deleted note goes, in words: the notes folder, or the other vault it lives in. */
+  const trashPlace = vault && vaultRoot(vault) ? `the ${vault.label} vault` : "your notes folder";
   /** Ultrawide: editor and live preview side by side instead of tabs. */
   const split = useMediaQuery(ULTRAWIDE_QUERY);
   /** The live preview re-renders behind the typing, so a long note never slows the keyboard down. */
@@ -410,7 +432,8 @@ export function NoteEditor({
   useEffect(() => {
     if (!ask || doc.load === "loading") return;
     onAskDone?.();
-    if (doc.load !== "ready") return;
+    // A read-only note has no Project field and can't be deleted: the request is dropped.
+    if (doc.load !== "ready" || readOnly) return;
     if (ask === "delete") {
       setConfirmDelete(true);
       return;
@@ -436,7 +459,7 @@ export function NoteEditor({
 
   /** Copies the note's full file path (footer button and right-click menu). */
   const copyPath = () => {
-    void copyText(fullPath(notesDir, path)).then((ok) => {
+    void copyText(placePath(path, vaults, notesDir)).then((ok) => {
       if (!ok) return;
       setPathCopied(true);
       if (copiedTimer.current) clearTimeout(copiedTimer.current);
@@ -456,6 +479,26 @@ export function NoteEditor({
 
   const menu = useMenuRegion((): MenuSection | null => {
     if (doc.load !== "ready") return null;
+    if (readOnly) {
+      return {
+        title: doc.fields.title.trim() || "Untitled note",
+        items: [
+          {
+            label: "Copy path",
+            icon: <CopyIcon />,
+            onSelect: copyPath,
+            tip: "Copies the note's full file path, so you can find it in File Explorer or Obsidian.",
+          },
+          {
+            label: "Delete note",
+            icon: <TrashIcon />,
+            danger: true,
+            onSelect: () => undefined,
+            disabled: READ_ONLY_REASON,
+          },
+        ],
+      };
+    }
     return {
       title: doc.fields.title.trim() || "Untitled note",
       items: [
@@ -480,7 +523,7 @@ export function NoteEditor({
           icon: <TrashIcon />,
           danger: true,
           onSelect: () => setConfirmDelete(true),
-          tip: "Asks first, then moves the file to .trash in your notes folder; nothing is erased.",
+          tip: `Asks first, then moves the file to .trash in ${trashPlace}; nothing is erased.`,
         },
       ],
     };
@@ -516,7 +559,7 @@ export function NoteEditor({
     (target === "write" ? writeTabRef : previewTabRef).current?.focus();
   };
 
-  const sectionTitle = doc.note ? sectionLabel(noteSection(doc.note)) : "Note";
+  const sectionTitle = doc.note ? placeLabel(noteSection(doc.note), vaults) : "Note";
 
   if (doc.load === "loading") {
     return <Panel title="Note" state="loading" skeleton={<EditorSkeleton />} className={styles.panel} />;
@@ -553,6 +596,122 @@ export function NoteEditor({
   }
 
   const { fields, note } = doc;
+
+  if (readOnly) {
+    const projectLabel = fields.projectId
+      ? (projects.projects?.find((p) => p.id === fields.projectId)?.name ?? fields.projectId)
+      : null;
+    const actionCount = jira.actions?.length;
+    const readPanel = (
+      <Panel
+        title={sectionTitle}
+        state="ok"
+        className={styles.panel}
+        bodyClassName={styles.panelBody}
+        action={
+          <span className={styles.status} data-kind="readonly">
+            <LockIcon size={13} />
+            Read only
+          </span>
+        }
+      >
+        <div className={styles.editor} data-readonly="" {...menu}>
+          <div className={styles.banner} data-tone="lock" role="note">
+            <p className={styles.bannerText}>
+              <span className={styles.bannerIcon}>
+                <LockIcon />
+              </span>
+              <span>
+                <strong>Read only: protected by the vault's rules.</strong> The dashboard shows this note and can draft
+                Jira tasks from it, but never changes the file.
+              </span>
+            </p>
+          </div>
+
+          {doc.notice ? (
+            <p className={styles.notice} role="status">
+              <span>{doc.notice}</span>
+              <button
+                type="button"
+                className={styles.inlineButton}
+                onClick={doc.dismissNotice}
+                data-tip="Hides this message; the note itself does not change."
+              >
+                Dismiss
+              </button>
+            </p>
+          ) : null}
+
+          <h3 className={styles.readTitle} dir="auto">
+            {fields.title.trim() || "Untitled note"}
+          </h3>
+
+          {projectLabel || fields.tags.length ? (
+            <dl className={styles.readMeta}>
+              {projectLabel ? (
+                <div className={styles.readMetaItem}>
+                  <dt>Project</dt>
+                  <dd dir="auto">{projectLabel}</dd>
+                </div>
+              ) : null}
+              {fields.tags.length ? (
+                <div className={styles.readMetaItem}>
+                  <dt>Tags</dt>
+                  <dd dir="auto">{fields.tags.join(", ")}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+
+          <div className={styles.readBody} role="region" aria-label="Note text" tabIndex={0}>
+            <MarkdownPreview markdown={fields.body} empty="This note has no text yet." />
+            {split ? null : <ActionsSection jira={jira} layout="tab" />}
+          </div>
+
+          <footer className={styles.foot}>
+            <p className={styles.fileInfo}>
+              <span className={styles.fileLabel}>File</span>{" "}
+              <span className={styles.filePath} dir="ltr">
+                {path}
+              </span>
+              {note?.created ? (
+                <>
+                  {" "}
+                  <span aria-hidden="true">·</span> Created {formatNoteDate(note.created)}
+                </>
+              ) : null}
+            </p>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={pathCopied ? <CheckIcon /> : <CopyIcon />}
+              onClick={copyPath}
+              tip="Copies the note's full file path, so you can find it in File Explorer or Obsidian."
+            >
+              {pathCopied ? "Copied" : "Copy path"}
+            </Button>
+          </footer>
+        </div>
+        <JiraReviewDialog jira={jira} noteTitle={fields.title.trim() || "Untitled note"} />
+      </Panel>
+    );
+    if (!split) return readPanel;
+    return (
+      <>
+        {readPanel}
+        <Panel
+          title="Detected actions"
+          state="ok"
+          meta={actionCount !== undefined ? formatNumber(actionCount) : undefined}
+          className={styles.panel}
+          bodyClassName={styles.livePreviewBody}
+        >
+          <ActionsSection jira={jira} layout="full" />
+        </Panel>
+      </>
+    );
+  }
+
   const titleError = save.kind === "invalid" ? validateTitle(fields.title) : null;
   const bytes = fields.body.length * 3 > SIZE_WARN_BYTES ? byteLength(fields.body) : 0;
   const disabled = doc.conflict !== null;
@@ -813,7 +972,7 @@ export function NoteEditor({
             className={styles.deleteButton}
             icon={<TrashIcon />}
             onClick={() => setConfirmDelete(true)}
-            tip="Asks first, then moves the file to .trash in your notes folder; nothing is erased."
+            tip={`Asks first, then moves the file to .trash in ${trashPlace}; nothing is erased.`}
           >
             Delete note
           </Button>
@@ -827,7 +986,7 @@ export function NoteEditor({
         confirmLabel="Move to trash"
         confirmingLabel="Moving to trash"
         cancelLabel="Keep note"
-        confirmTip="Moves the file to .trash in your notes folder; restore it from there in Obsidian."
+        confirmTip={`Moves the file to .trash in ${trashPlace}; restore it from there in Obsidian.`}
         cancelTip="Closes this question and leaves the note where it is."
         onCancel={() => setConfirmDelete(false)}
         onConfirm={async () => {
@@ -839,11 +998,11 @@ export function NoteEditor({
         }}
       >
         <p>
-          The file moves to the <code>.trash</code> folder inside your notes folder, so you can still restore it from
-          Obsidian or File Explorer.
+          The file moves to the <code>.trash</code> folder inside {trashPlace}, so you can still restore it from Obsidian
+          or File Explorer.
         </p>
         <p className={styles.dialogPath} dir="auto">
-          {notesDir}
+          {placePath(vault ? vaultRoot(vault) : "", vaults, notesDir)}
         </p>
       </ConfirmDialog>
 

@@ -354,8 +354,11 @@ function ActionRow({ action, site }: { action: DetectedAction; site: string }) {
 
 export interface ActionsSectionProps {
   jira: NoteJira;
-  /** "tab": under the preview in the Preview tab. "panel": pinned under the live preview (ultrawide). */
-  layout: "tab" | "panel";
+  /**
+   * "tab": under the preview in the Preview tab. "panel": pinned under the live preview (ultrawide).
+   * "full": a whole panel of its own, titled by that panel (a read-only note on ultrawide, v1.4).
+   */
+  layout: "tab" | "panel" | "full";
 }
 
 export function ActionsSection({ jira, layout }: ActionsSectionProps) {

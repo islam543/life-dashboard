@@ -51,13 +51,6 @@
   min-height: 0;
 }
 
-.scrollBody {
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
 .inactive {
   opacity: 0.5;
   cursor: not-allowed;
@@ -167,8 +160,9 @@
 /* Ultrawide: sections | notes | editor | preview. The editor pane splits into NoteEditor's two panels;
    a single panel there (no note open, loading, error) spans both columns. */
 @media (min-width: 1920px) {
+  /* The tree gets a little more room than on a desktop: vault names and nested vault folders. */
   .layout {
-    grid-template-columns: minmax(220px, 260px) minmax(280px, 380px) minmax(0, 1fr);
+    grid-template-columns: minmax(240px, 320px) minmax(280px, 380px) minmax(0, 1fr);
   }
 
   .editorPane {
@@ -181,4 +175,64 @@
   .editorPane > :only-child {
     grid-column: 1 / -1;
   }
+}
+
+/* Notes list pane body (v1.4): the title filter stays put, the list scrolls under it. */
+.listBody {
+  min-height: 0;
+}
+
+.listScroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 0 var(--space-1);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-bottom: var(--space-2);
+}
+
+.filter > svg {
+  position: absolute;
+  left: var(--space-2);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.filterInput {
+  width: 100%;
+  height: var(--target-min);
+  padding: 0 var(--space-2) 0 var(--space-8);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  text-align: start;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.filterInput::placeholder {
+  color: var(--text-faint);
+}
+
+.filterInput:hover {
+  border-color: var(--accent-line);
+}
+
+.filterInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }

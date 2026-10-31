@@ -257,7 +257,14 @@ export function normaliseSnapshot(raw: unknown, now: Date): Snapshot {
   if (isObject(raw.projects) && Array.isArray(raw.projects.projects) && Array.isArray(raw.projects.stats)) {
     snap.projects = raw.projects as unknown as Snapshot["projects"];
   }
-  if (isObject(raw.notes) && Array.isArray(raw.notes.recent)) snap.notes = raw.notes as unknown as Snapshot["notes"];
+  if (isObject(raw.notes) && Array.isArray(raw.notes.recent)) {
+    const notes = raw.notes as unknown as Snapshot["notes"];
+    // v1.4: notes saved before vaults existed are default-vault notes that were never read-only.
+    const recent = (notes.recent as unknown[]).map((n) =>
+      isObject(n) ? { ...n, vault: typeof n.vault === "string" ? n.vault : "notes", readOnly: n.readOnly === true } : n,
+    );
+    snap.notes = { ...notes, recent: recent as NoteMeta[] };
+  }
   return snap;
 }
 
@@ -285,7 +292,7 @@ export interface SnapshotServiceDeps {
   config: Config;
   /** data/ store; also holds projects.json. */
   store: Store;
-  /** Notes store for snapshot.notes and per-project note stats. Default: createNotesStore(config.notesDir). */
+  /** Notes store for snapshot.notes and per-project note stats, over every vault. Default: createNotesStore(config.notesDir, { vaults: config.vaults }). */
   notes?: NotesStore;
   timeoutMs?: number;
   now?: () => Date;
@@ -295,7 +302,7 @@ export interface SnapshotServiceDeps {
 export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotService {
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? ((line: string) => console.log(line));
-  const notesStore = deps.notes ?? createNotesStore(deps.config.notesDir);
+  const notesStore = deps.notes ?? createNotesStore(deps.config.notesDir, { vaults: deps.config.vaults, log });
   let current = emptySnapshot(now());
   let runCounter = 0;
   let local: LocalData = { file: null, allNotes: [], notes: { recent: [], status: "never_run" } };

@@ -6,7 +6,7 @@ import type { JiraCreateResult, JiraDraft, JiraEpicRef } from "../../shared/type
 import { childEnv, resolveClaudeCommand, spawnRunner, type RunResult } from "../ai/nextMoves";
 import { oneLine } from "../ai/validate";
 import { jiraSites } from "../collectors/jira";
-import { config } from "../config";
+import { config, presentVaults, type VaultConfig } from "../config";
 import { actionContext, detectActions, openActions } from "../jira/actions";
 import { CREATE_TIMEOUT_MS, createIssues, type CreateSettings } from "../jira/create";
 import {
@@ -39,6 +39,8 @@ import type { Store } from "../store";
 export interface JiraRunSettings extends Omit<CreateSettings, "timeoutMs"> {
   draftTimeoutMs: number;
   createTimeoutMs: number;
+  /** v1.4: note vaults the draft run may read (those present at run time). The create run never gets them. */
+  vaults: readonly VaultConfig[];
 }
 
 export interface JiraRoutesDeps {
@@ -86,6 +88,7 @@ function defaultSettings(): JiraRunSettings {
     product: config.jira.product,
     draftTimeoutMs: DRAFT_TIMEOUT_MS,
     createTimeoutMs: CREATE_TIMEOUT_MS,
+    vaults: config.vaults,
   };
 }
 
@@ -133,19 +136,21 @@ export function jiraRoutes(deps: JiraRoutesDeps): Hono {
       if (open.length === 0) throw badRequest("No open actions to file");
       const s = settings();
       const actions = promptActions(open, (a) => actionContext(note.body, a.line));
+      const vaults = presentVaults(s.vaults);
       const prompt = buildDraftPrompt({
         noteTitle: oneLine(note.title, 120),
         projectName: await projectNameOf(note.projectId),
         actions,
         site: s.site,
         projectKey: s.projectKey,
+        vaults: vaults.map((v) => ({ label: v.label, dir: v.dir })),
       });
 
       const startedAt = deps.now().getTime();
       let result: RunResult;
       try {
         await mkdir(s.runDir, { recursive: true });
-        result = await s.runner({ command: s.command, args: jiraRunArgs(prompt, SEARCH_TOOL), cwd: s.runDir, env: s.env, timeoutMs: s.draftTimeoutMs });
+        result = await s.runner({ command: s.command, args: jiraRunArgs(prompt, SEARCH_TOOL, vaults.map((v) => v.dir)), cwd: s.runDir, env: s.env, timeoutMs: s.draftTimeoutMs });
       } catch {
         result = { exitCode: null, stdout: "", stderr: "", timedOut: false, errorCode: "RUN_FAILED" };
       }

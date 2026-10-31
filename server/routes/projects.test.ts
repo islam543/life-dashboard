@@ -47,7 +47,7 @@ function fakeNotes(notes: NoteMeta[] = []): NotesStore {
     throw new Error("not used in this test");
   };
   return {
-    index: async () => ({ status: "ok", dir: path.join(tmp, "notes"), sections: [], notes }),
+    index: async () => ({ status: "ok", dir: path.join(tmp, "notes"), vaults: [], sections: [], notes }),
     read: unused, create: unused, update: unused, remove: unused,
     createSection: unused, renameSection: unused, removeSection: unused,
     recent: async () => [],
@@ -153,7 +153,7 @@ describe("GET /api/projects and seeding", () => {
     const { app } = await setup({
       file: { projects: [stored("fb", { sources: { sessions: ["QIC-FastBind", "NFC"], repos: ["QIC-FastBind"] } })], hidden: [] },
       notes: [{ path: "Meeting notes/a.md", section: "Meeting notes", title: "a", created: "2026-10-29T09:00:00.000Z",
-        updated: "2026-10-29T10:00:00.000Z", projectId: "fb", tags: [], excerpt: "", openActions: 1 }],
+        updated: "2026-10-29T10:00:00.000Z", projectId: "fb", tags: [], excerpt: "", openActions: 1, vault: "notes", readOnly: false }],
     });
     const state = await ok(await app.request("/api/projects"));
     expect(state.stats).toEqual([{ id: "fb", minutesByDay: { [ago(0)]: 95, [ago(1)]: 30 }, commitsByDay: { [ago(0)]: 3 },

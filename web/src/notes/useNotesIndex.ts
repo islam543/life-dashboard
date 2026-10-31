@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Note, NoteMeta, NotesIndex } from "../../../shared/types";
 import { errorMessage, isOffline } from "../api";
 import { notesApi } from "../api/notes";
+import { DEFAULT_VAULT_ID } from "../lib/notes";
 
 // The notes index (sections tree plus every note's metadata) for the Notes view. One read on mount
 // and a re-read when the window gets focus back (Islam may have added or moved files in Obsidian).
@@ -27,7 +28,9 @@ export interface NotesIndexResult {
 
 function metaOf(note: Note | NoteMeta): NoteMeta {
   const { path, section, title, created, updated, projectId, tags, excerpt, openActions } = note;
-  return { path, section, title, created, updated, projectId, tags, excerpt, openActions };
+  // vault and readOnly (v1.4) are missing from an older server; the default vault, writable, matches it.
+  const vault = typeof note.vault === "string" && note.vault ? note.vault : DEFAULT_VAULT_ID;
+  return { path, section, title, created, updated, projectId, tags, excerpt, openActions, vault, readOnly: note.readOnly === true };
 }
 
 export function useNotesIndex(): NotesIndexResult {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,7 @@ import { collectors as realRegistry } from "./collectors";
 import type { Collector, CollectorRegistry, CollectorResult, SourceKey } from "./collectors/types";
 import { SOURCE_KEYS } from "./collectors/types";
 import { loadConfig } from "./config";
-import type { NotesStore } from "./notes";
+import { createNotesStore, type NotesStore } from "./notes";
 import {
   assembleSnapshot,
   createSnapshotService,
@@ -275,13 +275,15 @@ describe("snapshot v1.1: projects and notes", () => {
     tags: [],
     excerpt: "",
     openActions: 0,
+    vault: "notes",
+    readOnly: false,
   });
   function fakeNotes(over: Partial<NotesStore> = {}): NotesStore {
     const unused = async (): Promise<never> => {
       throw new Error("not used in this test");
     };
     return {
-      index: async () => ({ status: "ok", dir: "notes", sections: [], notes: [] }),
+      index: async () => ({ status: "ok", dir: "notes", vaults: [], sections: [], notes: [] }),
       read: unused,
       create: unused,
       update: unused,
@@ -310,7 +312,7 @@ describe("snapshot v1.1: projects and notes", () => {
     projectsMock.loadProjectsFile.mockResolvedValue(file);
     projectsMock.computeProjectsState.mockReturnValue(state);
     const recentDays = vi.fn(async () => [note(2)]);
-    const svc = service(fakeNotes({ index: async () => ({ status: "ok", dir: "notes", sections: [], notes: [note(1), note(2)] }), recent: recentDays }));
+    const svc = service(fakeNotes({ index: async () => ({ status: "ok", dir: "notes", vaults: [], sections: [], notes: [note(1), note(2)] }), recent: recentDays }));
     await svc.load();
     const snap = svc.get(T0);
     expect(snap.notes).toEqual({ recent: [note(2)], status: "ok" });
@@ -324,9 +326,55 @@ describe("snapshot v1.1: projects and notes", () => {
     expect(gotNow).toEqual(T0);
   });
 
+  it("v1.4: recent notes come from every vault: last 14 days, newest first, at most 30", async () => {
+    const notesDir = path.join(tmp, "vault", "notes");
+    const learning = path.join(tmp, "Learning");
+    const qic = path.join(tmp, "QIC");
+    const put = async (file: string, updated: string) => {
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, `---\nupdated: ${updated}\n---\n# ${path.basename(file, ".md")}\n`);
+    };
+    await put(path.join(notesDir, "Meeting notes", "default.md"), "2026-10-29T09:00:00.000Z");
+    await put(path.join(learning, "wiki", "learn.md"), "2026-10-28T09:00:00.000Z");
+    await put(path.join(learning, "raw", "source.md"), "2026-10-27T09:00:00.000Z");
+    await put(path.join(qic, "wiki", "old.md"), "2026-10-01T09:00:00.000Z"); // older than 14 days
+    for (let i = 0; i < 30; i++) await put(path.join(qic, "bulk", `b${i}.md`), `2026-10-2${i % 6}T08:00:00.000Z`);
+    const notes = createNotesStore(notesDir, {
+      log: () => undefined,
+      vaults: [
+        { id: "learning", label: "Learning", prefix: "@learning/", dir: learning, readOnlyFolders: ["raw"] },
+        { id: "qic-uw", label: "QIC Underwriting Agent", prefix: "@qic-uw/", dir: qic, readOnlyFolders: ["sources"] },
+      ],
+    });
+    const svc = service(notes);
+    await svc.load();
+    const { recent, status } = svc.get(T0).notes;
+    expect(status).toBe("ok");
+    expect(recent).toHaveLength(RECENT_NOTES_MAX);
+    expect(recent.slice(0, 3).map((n) => [n.path, n.vault, n.readOnly])).toEqual([
+      ["Meeting notes/default.md", "notes", false],
+      ["@learning/wiki/learn.md", "learning", false],
+      ["@learning/raw/source.md", "learning", true],
+    ]);
+    expect(new Set(recent.map((n) => n.vault))).toEqual(new Set(["notes", "learning", "qic-uw"]));
+    expect(recent.map((n) => n.path)).not.toContain("@qic-uw/wiki/old.md");
+    // Project note stats still see every note, old ones included.
+    const allNotes = projectsMock.computeProjectsState.mock.calls.at(-1)![2];
+    expect(allNotes.map((n) => n.path)).toContain("@qic-uw/wiki/old.md");
+  });
+
+  it("v1.4: recent notes in a snapshot saved before vaults are default-vault notes", () => {
+    const old = { path: "Meeting notes/a.md", section: "Meeting notes", title: "a", created: "", updated: "", projectId: null, tags: [], excerpt: "", openActions: 0 };
+    const snap = normaliseSnapshot({ notes: { recent: [old, { ...old, path: "@learning/x.md", vault: "learning", readOnly: true }], status: "ok" } }, T0);
+    expect(snap.notes.recent.map((n) => [n.path, n.vault, n.readOnly])).toEqual([
+      ["Meeting notes/a.md", "notes", false],
+      ["@learning/x.md", "learning", true],
+    ]);
+  });
+
   it("caps recent notes at 30", async () => {
     const many = Array.from({ length: 40 }, (_, i) => note(i + 1));
-    const svc = service(fakeNotes({ index: async () => ({ status: "ok", dir: "notes", sections: [], notes: many }), recent: async () => many }));
+    const svc = service(fakeNotes({ index: async () => ({ status: "ok", dir: "notes", vaults: [], sections: [], notes: many }), recent: async () => many }));
     await svc.load();
     expect(svc.get(T0).notes.recent).toHaveLength(RECENT_NOTES_MAX);
   });
@@ -353,7 +401,7 @@ describe("snapshot v1.1: projects and notes", () => {
     const github = vi.fn(async () => ({ status: "ok" as const, data: githubData(1) }));
     let notesNow = [note(1)];
     const svc = service(
-      fakeNotes({ index: async () => ({ status: "ok", dir: "notes", sections: [], notes: notesNow }), recent: async () => notesNow }),
+      fakeNotes({ index: async () => ({ status: "ok", dir: "notes", vaults: [], sections: [], notes: notesNow }), recent: async () => notesNow }),
       registry({ github: { key: "github", collect: github } }),
     );
     await svc.load();

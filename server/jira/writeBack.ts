@@ -101,6 +101,10 @@ export function writeBackFailure(result: WriteBackResult, edits: readonly WriteB
   if (result.status === "conflict") {
     return { draftId: WRITE_BACK_ID, error: `Created in Jira, but the note changed; add the keys by hand: ${keys}` };
   }
+  if (result.status === "error" && /protected by the vault's rules/i.test(result.reason)) {
+    // A note in a protected folder (raw/, sources/) is never edited, so no "add them by hand" either.
+    return { draftId: WRITE_BACK_ID, error: `Created in Jira: ${keys}. This note is in a protected folder, so the keys were not written into it.` };
+  }
   if (result.status === "error") {
     return { draftId: WRITE_BACK_ID, error: `Created in Jira, but the keys could not be added to the note (${result.reason}); add them by hand: ${keys}` };
   }

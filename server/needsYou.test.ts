@@ -451,7 +451,7 @@ describe("v1.1: open action items in meeting notes", () => {
   const PATH = "Meeting notes/FastBind/2026-10-26-review.md";
   const meeting = (extra: Partial<NoteMeta> = {}): NoteMeta => ({
     path: PATH, section: "Meeting notes/FastBind", title: "Sprint review", created: at(-(2 * D + MIN)), updated: at(-H),
-    projectId: null, tags: [], excerpt: "", openActions: 2, ...extra,
+    projectId: null, tags: [], excerpt: "", openActions: 2, vault: "notes", readOnly: false, ...extra,
   });
   const run = (note: NoteMeta, edit: (s: Snapshot) => void = () => undefined) =>
     computeNeedsYou(snap((x) => { x.notes.recent = [note]; edit(x); }), NOW);

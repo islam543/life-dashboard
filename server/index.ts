@@ -29,7 +29,7 @@ async function collectOnce(): Promise<void> {
 async function serveApp(): Promise<void> {
   const store = createStore(config.dataDir);
   // One notes store for the snapshot and the API, so they share one cache.
-  const notes = createNotesStore(config.notesDir);
+  const notes = createNotesStore(config.notesDir, { vaults: config.vaults });
   const snapshots = createSnapshotService({ collectors, config, store, notes });
   await snapshots.load();
 

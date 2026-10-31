@@ -107,6 +107,8 @@ function failureMessage(failure: SaveFailure, err: unknown): string {
       return "The file isn't in the notes folder any more. It may have been moved, renamed or deleted in Obsidian.";
     case "too_large":
       return "This note is over 200 KB, so it can't be saved. Move part of it into a new note.";
+    case "forbidden":
+      return `${errorMessage(err).replace(/\.?$/, ".")} The dashboard can't change this note.`;
     default:
       return errorMessage(err);
   }
@@ -265,10 +267,12 @@ export function useNoteDocument(path: string, onSaved: (note: Note) => void): No
         if (dirtyNow()) writeDraft(path, fieldsRef.current);
       }, DRAFT_DELAY_MS);
       if (paused.current || !savedRef.current) return;
-      // Server down: the retry timer is already running. File gone: every save would fail the same
-      // way. Either way, don't fire a request on every pause in typing; blur and Ctrl+S still try.
+      // Server down: the retry timer is already running. File gone or protected (403): every save
+      // would fail the same way. Either way, don't fire a request on every pause in typing; blur and
+      // Ctrl+S still try.
       const failed = lastFailure.current;
-      const waiting = failed !== null && (isRetryable(failed) ? retryTimer.current !== null : failed === "gone");
+      const waiting =
+        failed !== null && (isRetryable(failed) ? retryTimer.current !== null : failed === "gone" || failed === "forbidden");
       if (waiting && !immediate) return;
       clearTimer(saveTimer);
       setSave((s) => (s.kind === "failed" && isRetryable(s.failure) ? s : { kind: "saving" }));

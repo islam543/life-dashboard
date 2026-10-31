@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NoteMeta, NoteSection } from "../../../shared/types";
+import type { NoteMeta, NoteSection, NoteVault } from "../../../shared/types";
 import {
   addTag,
   ALL_NOTES,
@@ -7,6 +7,26 @@ import {
   canDeleteSection,
   classifySaveError,
   countOpenTasks,
+  defaultDestination,
+  defaultVaultId,
+  filterByTitle,
+  filterFolderOptions,
+  folderDepth,
+  folderOptions,
+  holdsProtected,
+  isProtectedPath,
+  isReadOnlyNote,
+  isVaultRoot,
+  noteVaultId,
+  notesInScope,
+  openTrail,
+  placeExists,
+  placeLabel,
+  splitVaultPath,
+  treeCounts,
+  vaultGroups,
+  vaultRows,
+  vaultsOf,
   defaultNewNoteSection,
   defaultTemplate,
   deleteBlockedReason,
@@ -59,6 +79,8 @@ const meta = (path: string, created: string, extra: Partial<NoteMeta> = {}): Not
   tags: [],
   excerpt: "",
   openActions: 0,
+  vault: "notes",
+  readOnly: false,
   ...extra,
 });
 
@@ -346,5 +368,312 @@ describe("formatNoteDate", () => {
     expect(formatNoteDate(new Date(2026, 9, 27, 10, 0).toISOString(), now)).toBe("Tue 27 Oct");
     expect(formatNoteDate(new Date(2025, 2, 12, 10, 0).toISOString(), now)).toBe("12 Mar 2025");
     expect(formatNoteDate("nope", now)).toBe("");
+  });
+});
+
+/* v1.4 vaults ----------------------------------------------------------------------------------- */
+
+const VAULTS: NoteVault[] = [
+  { id: "notes", label: "Working-With-Claude notes", prefix: "", dir: "C:\\MD\\WWC\\notes", readOnlyFolders: [], noteCount: 3 },
+  { id: "learning", label: "Learning", prefix: "@learning/", dir: "C:\\MD\\Learning", readOnlyFolders: ["raw/"], noteCount: 4 },
+  {
+    id: "qic-uw",
+    label: "QIC Underwriting Agent",
+    prefix: "@qic-uw/",
+    dir: "C:\\MD\\QIC_Underwriting_Agent",
+    readOnlyFolders: ["sources", "project/P&C/docs"],
+    noteCount: 1,
+  },
+];
+
+const V_SECTIONS: NoteSection[] = [
+  section("Meeting notes", [section("Meeting notes/FastBind")]),
+  section("Tasks"),
+  {
+    path: "@learning",
+    name: "Learning",
+    noteCount: 1,
+    children: [
+      { path: "@learning/raw", name: "raw", noteCount: 1, readOnly: true, children: [section("@learning/raw/papers")] },
+      section("@learning/wiki", [section("@learning/wiki/ai engineering"), section("@learning/wiki/ذكاء")]),
+    ],
+  },
+  {
+    path: "@qic-uw",
+    name: "QIC Underwriting Agent",
+    noteCount: 0,
+    children: [
+      section("@qic-uw/sources"),
+      section("@qic-uw/project", [section("@qic-uw/project/P&C", [section("@qic-uw/project/P&C/docs")])]),
+    ],
+  },
+];
+
+const V_NOTES: NoteMeta[] = [
+  meta("Meeting notes/2026-10-01-kickoff.md", "2026-10-01T09:00:00+03:00", { title: "Kickoff" }),
+  meta("Tasks/send-slip.md", "2026-10-20T09:00:00+03:00", { title: "Send slip" }),
+  meta("loose.md", "2026-09-01T08:00:00+03:00", { title: "Loose" }),
+  meta("@learning/index.md", "2026-10-10T09:00:00+03:00", { title: "Index", vault: "learning" }),
+  meta("@learning/raw/paper one.md", "2026-10-11T09:00:00+03:00", { title: "Paper one", vault: "learning", readOnly: true }),
+  meta("@learning/wiki/rag.md", "2026-10-30T09:00:00+03:00", { title: "RAG basics", vault: "learning" }),
+  meta("@learning/wiki/ذكاء/مقدمة.md", "2026-10-29T09:00:00+03:00", { title: "مقدمة في الذكاء", vault: "learning" }),
+  meta("@qic-uw/project/P&C/docs/spec.md", "2026-10-15T09:00:00+03:00", { title: "Spec", vault: "qic-uw", readOnly: true }),
+];
+
+describe("vaults: prefix parsing", () => {
+  it("reads the vault list, default first, and null from an older server", () => {
+    expect(vaultsOf({ vaults: VAULTS })?.map((v) => v.id)).toEqual(["notes", "learning", "qic-uw"]);
+    expect(vaultsOf({ vaults: [VAULTS[1], VAULTS[0]] })?.map((v) => v.id)).toEqual(["notes", "learning"]);
+    expect(vaultsOf({})).toBeNull();
+    expect(vaultsOf({ vaults: "nope" as unknown as NoteVault[] })).toBeNull();
+    expect(vaultsOf({ vaults: [] })).toBeNull();
+    expect(vaultsOf(null)).toBeNull();
+  });
+
+  it("adds the default vault when a server lists only others, and tolerates missing fields", () => {
+    const list = vaultsOf({ dir: "C:\\notes", vaults: [{ id: "learning", prefix: "@learning/" } as NoteVault] });
+    expect(list?.map((v) => [v.id, v.prefix, v.dir])).toEqual([
+      ["notes", "", "C:\\notes"],
+      ["learning", "@learning/", ""],
+    ]);
+    expect(list?.[1].readOnlyFolders).toEqual([]);
+  });
+
+  it("splits a path into its vault and the path inside it", () => {
+    expect(splitVaultPath("@learning/wiki/rag.md", VAULTS)).toMatchObject({ vault: { id: "learning" }, inner: "wiki/rag.md" });
+    expect(splitVaultPath("@learning", VAULTS)).toMatchObject({ vault: { id: "learning" }, inner: "" });
+    expect(splitVaultPath("Meeting notes/a.md", VAULTS)).toMatchObject({ vault: { id: "notes" }, inner: "Meeting notes/a.md" });
+    // Not a prefix: a default-vault folder that happens to start with @, or a longer name.
+    expect(splitVaultPath("@learning2/x.md", VAULTS).vault?.id).toBe("notes");
+    expect(splitVaultPath("@home/x.md", VAULTS).vault?.id).toBe("notes");
+    expect(splitVaultPath("a.md", null)).toEqual({ vault: null, inner: "a.md" });
+  });
+
+  it("knows vault rows, depth inside a vault and each note's vault", () => {
+    expect(isVaultRoot("", VAULTS)).toBe(true);
+    expect(isVaultRoot("@learning", VAULTS)).toBe(true);
+    expect(isVaultRoot("@learning/wiki", VAULTS)).toBe(false);
+    expect(isVaultRoot("", null)).toBe(false);
+    expect(folderDepth("@learning/wiki/ai engineering", VAULTS)).toBe(2);
+    expect(folderDepth("Meeting notes/FastBind", VAULTS)).toBe(2);
+    expect(noteVaultId({ path: "@qic-uw/a.md" }, VAULTS)).toBe("qic-uw");
+    expect(noteVaultId({ path: "@qic-uw/a.md", vault: "learning" }, VAULTS)).toBe("learning");
+  });
+
+  it("labels places with the vault name, and Arabic or spaced names as they are", () => {
+    expect(placeLabel("@learning/wiki/ذكاء", VAULTS)).toBe("Learning / wiki / ذكاء");
+    expect(placeLabel("@learning", VAULTS)).toBe("Learning");
+    expect(placeLabel("", VAULTS)).toBe("Working-With-Claude notes");
+    expect(placeLabel("Meeting notes/FastBind", VAULTS)).toBe("Meeting notes / FastBind");
+    expect(placeLabel("Tasks", VAULTS, true)).toBe("Working-With-Claude notes / Tasks");
+    expect(placeLabel("", null)).toBe("All notes");
+  });
+
+  it("opens the vault row and every ancestor so a deep-linked note shows", () => {
+    expect(openTrail("@learning/wiki/ai engineering", VAULTS)).toEqual(["@learning", "@learning/wiki"]);
+    expect(openTrail("Meeting notes/FastBind", VAULTS)).toEqual(["", "Meeting notes"]);
+    expect(openTrail("Meeting notes/FastBind", null)).toEqual(["Meeting notes"]);
+  });
+});
+
+describe("vaults: read-only folders", () => {
+  it("protects the listed folders and everything inside, ignoring case and slashes", () => {
+    expect(isProtectedPath("@learning/raw", VAULTS)).toBe(true);
+    expect(isProtectedPath("@learning/RAW/papers/x.md", VAULTS)).toBe(true);
+    expect(isProtectedPath("@learning/rawish", VAULTS)).toBe(false);
+    expect(isProtectedPath("@learning", VAULTS)).toBe(false);
+    expect(isProtectedPath("@qic-uw/project/P&C/docs/spec.md", VAULTS)).toBe(true);
+    expect(isProtectedPath("@qic-uw/project/P&C", VAULTS)).toBe(false);
+    expect(isProtectedPath("raw/x.md", VAULTS)).toBe(false);
+    expect(isReadOnlyNote({ path: "Meeting notes/a.md", readOnly: true }, VAULTS)).toBe(true);
+  });
+
+  it("knows which folders hold a protected one, so their name and place stay", () => {
+    expect(holdsProtected("@qic-uw/project", VAULTS)).toBe(true);
+    expect(holdsProtected("@qic-uw/project/P&C", VAULTS)).toBe(true);
+    expect(holdsProtected("@qic-uw/project/P&C/docs", VAULTS)).toBe(false);
+    expect(holdsProtected("@learning/wiki", VAULTS)).toBe(false);
+    expect(holdsProtected("Meeting notes", VAULTS)).toBe(false);
+  });
+});
+
+describe("vaults: grouping and the tree", () => {
+  it("groups sections by vault in vault order, with Tasks staying in the default vault", () => {
+    const groups = vaultGroups(V_SECTIONS, VAULTS);
+    expect(groups.map((g) => [g.vault.id, g.root, g.children.map((s) => s.name)])).toEqual([
+      ["notes", "", ["Meeting notes", "Tasks"]],
+      ["learning", "@learning", ["raw", "wiki"]],
+      ["qic-uw", "@qic-uw", ["sources", "project"]],
+    ]);
+  });
+
+  it("gives an empty vault an empty group, and a missing vault no group", () => {
+    const empty = vaultGroups([section("Meeting notes")], VAULTS);
+    expect(empty[1].children).toEqual([]);
+    // Learning's folder is gone: the server leaves it out of vaults and sections.
+    const two = vaultGroups(
+      V_SECTIONS.filter((s) => s.path !== "@learning"),
+      [VAULTS[0], VAULTS[2]],
+    );
+    expect(two.map((g) => g.vault.id)).toEqual(["notes", "qic-uw"]);
+  });
+
+  it("shows each vault open at its first level, with deeper folders closed until opened", () => {
+    const groups = vaultGroups(V_SECTIONS, VAULTS);
+    const rows = vaultRows(groups, new Set(), new Set(), VAULTS);
+    expect(rows.map((r) => r.path)).toEqual([
+      "",
+      "Meeting notes",
+      "Tasks",
+      "@learning",
+      "@learning/raw",
+      "@learning/wiki",
+      "@qic-uw",
+      "@qic-uw/sources",
+      "@qic-uw/project",
+    ]);
+    expect(rows[3]).toMatchObject({ kind: "vault", level: 1, posInSet: 2, setSize: 3, expanded: true, name: "Learning" });
+    expect(rows[4]).toMatchObject({ kind: "folder", level: 2, readOnly: true, parent: "@learning" });
+    expect(rows[7]).toMatchObject({ readOnly: true });
+    expect(rows[8]).toMatchObject({ readOnly: false, hasChildren: true, expanded: false });
+
+    const closed = vaultRows(groups, new Set(["@learning/wiki"]), new Set(["", "@qic-uw"]), VAULTS);
+    expect(closed.map((r) => r.path)).toEqual([
+      "",
+      "@learning",
+      "@learning/raw",
+      "@learning/wiki",
+      "@learning/wiki/ai engineering",
+      "@learning/wiki/ذكاء",
+      "@qic-uw",
+    ]);
+    expect(treeKeyAction(closed, "", "ArrowRight")).toEqual({ kind: "expand", path: "" });
+    expect(treeKeyAction(closed, "@learning/wiki/ذكاء", "ArrowLeft")).toEqual({ kind: "focus", path: "@learning/wiki" });
+  });
+
+  it("counts each vault's own notes on its row", () => {
+    const counts = treeCounts(V_SECTIONS, V_NOTES, VAULTS);
+    expect(counts.get("")?.total).toBe(3);
+    expect(counts.get("@learning")?.total).toBe(4);
+    expect(counts.get("@learning/wiki")?.total).toBe(2);
+    expect(counts.get("@qic-uw")?.total).toBe(1);
+    // Without vaults, "" is still All notes.
+    expect(treeCounts(V_SECTIONS, V_NOTES, null).get("")?.total).toBe(8);
+  });
+
+  it("knows which places exist, vault rows included", () => {
+    expect(placeExists(V_SECTIONS, VAULTS, "@learning/wiki")).toBe(true);
+    expect(placeExists(V_SECTIONS, VAULTS, "@qic-uw")).toBe(true);
+    expect(placeExists(V_SECTIONS, VAULTS, "@learning/gone")).toBe(false);
+    expect(placeExists(V_SECTIONS, null, "")).toBe(true);
+  });
+});
+
+describe("vaults: the list", () => {
+  it("lists a vault's own notes newest first on its row, and a folder with its subfolders", () => {
+    expect(notesInScope(V_NOTES, "", VAULTS).map((x) => x.title)).toEqual(["Send slip", "Kickoff", "Loose"]);
+    expect(notesInScope(V_NOTES, "@learning", VAULTS).map((x) => x.title)).toEqual([
+      "RAG basics",
+      "مقدمة في الذكاء",
+      "Paper one",
+      "Index",
+    ]);
+    expect(notesInScope(V_NOTES, "@learning/wiki", VAULTS)).toHaveLength(2);
+    expect(notesInScope(V_NOTES, "", null)).toHaveLength(8);
+  });
+
+  it("filters by title words in any order, ignoring case", () => {
+    expect(filterByTitle(V_NOTES, "rag").map((x) => x.title)).toEqual(["RAG basics"]);
+    expect(filterByTitle(V_NOTES, "BASICS rag")).toHaveLength(1);
+    expect(filterByTitle(V_NOTES, "الذكاء").map((x) => x.title)).toEqual(["مقدمة في الذكاء"]);
+    expect(filterByTitle(V_NOTES, "   ")).toHaveLength(8);
+    expect(filterByTitle(V_NOTES, "nothing like this")).toEqual([]);
+    expect(filterByTitle([meta("x.md", "2026-10-01T09:00:00Z", { title: "" })], "untitled")).toHaveLength(1);
+  });
+
+  it("sorts and filters 1,300 notes quickly", () => {
+    const many = Array.from({ length: 1300 }, (_, i) =>
+      meta(`@learning/wiki/n${i}.md`, new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(), {
+        title: `Topic ${i}`,
+        vault: "learning",
+      }),
+    );
+    const started = performance.now();
+    const scoped = notesInScope(many, "@learning", VAULTS);
+    const hits = filterByTitle(scoped, "1299 topic");
+    expect(scoped[0].title).toBe("Topic 1299");
+    expect(hits.map((x) => x.title)).toEqual(["Topic 1299"]);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
+describe("vaults: where a new note goes", () => {
+  it("offers a vault's folders without protected ones, its top level first, with full paths", () => {
+    const learning = folderOptions(V_SECTIONS, VAULTS, "learning");
+    expect(learning.map((o) => o.path)).toEqual([
+      "@learning",
+      "@learning/wiki",
+      "@learning/wiki/ai engineering",
+      "@learning/wiki/ذكاء",
+    ]);
+    expect(learning[0]).toMatchObject({ root: true, parts: [] });
+    expect(learning[2].parts).toEqual(["wiki", "ai engineering"]);
+
+    const qic = folderOptions(V_SECTIONS, VAULTS, "qic-uw");
+    expect(qic.map((o) => o.path)).toEqual(["@qic-uw", "@qic-uw/project", "@qic-uw/project/P&C"]);
+
+    const main = folderOptions(V_SECTIONS, VAULTS, "notes");
+    expect(main.map((o) => o.path)).toEqual(["Meeting notes", "Meeting notes/FastBind", "Tasks"]);
+    expect(folderOptions(V_SECTIONS, VAULTS, "gone")).toEqual([]);
+  });
+
+  it("offers every writable section without vaults", () => {
+    const legacy = folderOptions([section("A", [section("A/B")]), { ...section("Locked"), readOnly: true }], null, null);
+    expect(legacy.map((o) => o.path)).toEqual(["A", "A/B"]);
+  });
+
+  it("searches folders by every typed word", () => {
+    const learning = folderOptions(V_SECTIONS, VAULTS, "learning");
+    expect(filterFolderOptions(learning, "ai eng").map((o) => o.path)).toEqual(["@learning/wiki/ai engineering"]);
+    expect(filterFolderOptions(learning, "WIKI/ذكاء").map((o) => o.path)).toEqual(["@learning/wiki/ذكاء"]);
+    expect(filterFolderOptions(learning, "top")).toHaveLength(1);
+    expect(filterFolderOptions(learning, "")).toHaveLength(4);
+  });
+
+  it("picks the open folder, else a writable parent, else the vault's top level", () => {
+    expect(defaultDestination(V_SECTIONS, VAULTS, "@learning/wiki")).toEqual({ vault: "learning", folder: "@learning/wiki" });
+    expect(defaultDestination(V_SECTIONS, VAULTS, "@learning/raw/papers")).toEqual({ vault: "learning", folder: "@learning" });
+    expect(defaultDestination(V_SECTIONS, VAULTS, "@qic-uw/project/P&C/docs")).toEqual({
+      vault: "qic-uw",
+      folder: "@qic-uw/project/P&C",
+    });
+    expect(defaultDestination(V_SECTIONS, VAULTS, "@learning")).toEqual({ vault: "learning", folder: "@learning" });
+  });
+
+  it("uses Meeting notes in Working-With-Claude for its row, anything unknown, or nothing open", () => {
+    expect(defaultDestination(V_SECTIONS, VAULTS, "")).toEqual({ vault: "notes", folder: "Meeting notes" });
+    expect(defaultDestination(V_SECTIONS, VAULTS, "Tasks")).toEqual({ vault: "notes", folder: "Tasks" });
+    expect(defaultDestination(V_SECTIONS, VAULTS, "Gone/away")).toEqual({ vault: "notes", folder: "Meeting notes" });
+    expect(defaultVaultId(VAULTS, null)).toBe("notes");
+    expect(defaultVaultId(VAULTS, { vault: "learning", folder: "@learning" })).toBe("learning");
+    expect(defaultVaultId(null, null)).toBeNull();
+  });
+
+  it("falls back to the default vault, or null when there is nowhere to write", () => {
+    expect(defaultDestination([section("Ideas")], [VAULTS[0]], "")).toEqual({ vault: "notes", folder: "Ideas" });
+    expect(defaultDestination([], [VAULTS[0]], "")).toBeNull();
+    expect(defaultDestination(SECTIONS, null, ALL_NOTES)).toEqual({ vault: null, folder: "Meeting notes" });
+    expect(defaultDestination(SECTIONS, null, "Meeting notes/FastBind")).toEqual({
+      vault: null,
+      folder: "Meeting notes/FastBind",
+    });
+    expect(defaultDestination([], null, ALL_NOTES)).toBeNull();
+  });
+});
+
+describe("vaults: saving into a protected folder", () => {
+  it("sorts a 403 as forbidden, which retrying can't fix", () => {
+    expect(classifySaveError(403, false)).toBe("forbidden");
+    expect(isRetryable("forbidden")).toBe(false);
   });
 });

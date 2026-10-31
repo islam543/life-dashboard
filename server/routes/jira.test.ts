@@ -43,6 +43,15 @@ type Answer = (req: RunRequest, run: number) => RunResult | Promise<RunResult>;
 const envelope = (result: string): RunResult => ({ exitCode: 0, stdout: JSON.stringify({ type: "result", result, is_error: false }), stderr: "", timedOut: false });
 
 /** The router mounted like app.ts mounts it, with app.ts's error mapping. */
+/** v1.4: two temp vault folders that exist and one that does not. */
+function testVaults(): JiraRunSettings["vaults"] {
+  return [
+    { id: "notes", label: "Working-With-Claude notes", prefix: "", dir: path.join(tmp, "vault", "notes"), readOnlyFolders: [] },
+    { id: "learning", label: "Learning", prefix: "@learning/", dir: path.join(tmp, "Learning"), readOnlyFolders: ["raw"] },
+    { id: "qic-uw", label: "QIC Underwriting Agent", prefix: "@qic-uw/", dir: path.join(tmp, "missing-qic"), readOnlyFolders: [] },
+  ];
+}
+
 function build(answer: Answer) {
   const calls: RunRequest[] = [];
   const run: Partial<JiraRunSettings> = {
@@ -58,6 +67,7 @@ function build(answer: Answer) {
     projectKey: "AN",
     draftTimeoutMs: 1000,
     createTimeoutMs: 1000,
+    vaults: testVaults(),
   };
   const app = new Hono();
   app.route(
@@ -170,7 +180,8 @@ describe("GET /api/jira/actions", () => {
 });
 
 describe("POST /api/jira/draft", () => {
-  it("runs claude with only the search tool and returns a validated draft", async () => {
+  it("runs claude with the search tool plus read-only vault access and returns a validated draft", async () => {
+    await mkdir(path.join(tmp, "Learning"), { recursive: true });
     await store.write(PROJECTS_FILE, { projects: [{ id: "mvhi", name: "MVHI Claims Copilot", area: "work", status: "active", deadline: null, description: "", goals: [], tasks: [], sources: { sessions: [], repos: [] }, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString() }], hidden: [] });
     const notePath = await meetingNote(MEETING, "mvhi");
     let actions: DetectedAction[] = [];
@@ -190,12 +201,16 @@ describe("POST /api/jira/draft", () => {
     expect(command).toBe("claude-fake");
     expect(cwd).toBe(path.join(tmp, "data", "jira-run"));
     expect(env).toEqual({ PATH: "fake" });
-    expect(flagValues(args, "--tools")).toEqual(["ToolSearch"]);
-    expect(flagValues(args, "--allowedTools")).toEqual([SEARCH_TOOL]);
+    expect(flagValues(args, "--tools")).toEqual(["ToolSearch", "Read", "Glob", "Grep"]);
+    expect(flagValues(args, "--allowedTools")).toEqual([SEARCH_TOOL, "Read", "Glob", "Grep"]);
+    // Only vault folders that exist: the missing QIC folder is left out.
+    expect(flagValues(args, "--add-dir")).toEqual([path.join(tmp, "vault", "notes"), path.join(tmp, "Learning")]);
     for (const tool of BLOCKED_TOOLS) expect(flagValues(args, "--disallowedTools")).toContain(tool);
     expect(flagValues(args, "--disallowedTools")).toContain(CREATE_TOOL);
     expect(args).not.toContain("--strict-mcp-config");
     const prompt = args[1]!;
+    expect(prompt).toContain(`  Learning: ${path.join(tmp, "Learning")}`);
+    expect(prompt).not.toContain("QIC Underwriting Agent");
     expect(prompt).toContain('Note title: "Claims sync"');
     expect(prompt).toContain('Project: "MVHI Claims Copilot"');
     expect(prompt).toContain(epicJql("AN"));
@@ -319,6 +334,7 @@ describe("POST /api/jira/create", () => {
       expect(flagValues(call.args, "--allowedTools")).toEqual([CREATE_TOOL]);
       expect(flagValues(call.args, "--tools")).toEqual(["ToolSearch"]);
       expect(call.args).not.toContain("--strict-mcp-config");
+      expect(call.args).not.toContain("--add-dir"); // v1.4: the create run never reads the vaults
     }
     const epicPrompt = calls[1]!.args[1]!;
     expect(epicPrompt).toContain('"issueTypeName": "Epic"');

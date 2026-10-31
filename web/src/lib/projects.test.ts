@@ -54,7 +54,7 @@ function task(id: string, extra: Partial<ProjectTask> = {}): ProjectTask {
 }
 
 function note(path: string, projectId: string | null, openActions: number, updated = "2026-10-29T10:00:00.000Z"): NoteMeta {
-  return { path, section: "Meeting notes", title: path, created: updated, updated, projectId, tags: [], excerpt: "", openActions };
+  return { path, section: "Meeting notes", title: path, created: updated, updated, projectId, tags: [], excerpt: "", openActions, vault: "notes", readOnly: false };
 }
 
 function state(projects: Project[], allStats: ProjectStats[] = []): ProjectsState {

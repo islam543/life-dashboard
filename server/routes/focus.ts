@@ -80,6 +80,8 @@ export function focusRoutes(deps: FocusRoutesDeps): Hono {
     store,
     runDir: store.pathOf(STEPS_RUN_DIR),
     runner: deps.stepsRunner,
+    // v1.4: the steps run may read every note vault (read-only reference).
+    vaults: config.vaults,
     command: resolveClaudeCommand(config.home),
     now,
     log,

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -366,7 +366,7 @@ describe("prompt", () => {
     });
     const meta = (path: string, extra: Partial<NoteMeta> = {}): NoteMeta => ({
       path, section: path.split("/")[0]!, title: path, created: "2026-10-28T10:00:00.000Z", updated: "2026-10-28T11:00:00.000Z",
-      projectId: null, tags: [], excerpt: "", openActions: 0, ...extra,
+      projectId: null, tags: [], excerpt: "", openActions: 0, vault: "notes", readOnly: false, ...extra,
     });
 
     function withProjectsAndNotes(): Snapshot {
@@ -453,6 +453,46 @@ describe("process plumbing", () => {
     const tools = args.indexOf("--tools");
     expect(args.slice(tools + 1, tools + 4)).toEqual(["Read", "Glob", "Grep"]);
     expect(args[args.indexOf("--setting-sources") + 1]).toBe("project");
+  });
+
+  it("v1.4: adds --add-dir for each extra vault, keeping the read-only tools and the block list", () => {
+    const args = claudeArgs("hello", ["C:\\vaults\\Learning", "C:\\vaults\\QIC"]);
+    const tools = args.indexOf("--tools");
+    expect(args.slice(tools + 1, tools + 4)).toEqual(["Read", "Glob", "Grep"]);
+    const addDir = args.indexOf("--add-dir");
+    expect(args.slice(addDir + 1, addDir + 3)).toEqual(["C:\\vaults\\Learning", "C:\\vaults\\QIC"]);
+    expect(args[addDir + 3]).toBe("--disallowedTools");
+    for (const tool of BLOCKED_TOOLS) expect(args).toContain(tool);
+    expect(args).toContain("--strict-mcp-config");
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("project");
+    expect(claudeArgs("hello")).not.toContain("--add-dir");
+    expect(claudeArgs("hello", [])).toEqual(claudeArgs("hello"));
+  });
+
+  it("v1.4: the run gets --add-dir and prompt lines only for extra vaults whose folder exists", async () => {
+    const learning = path.join(tmp, "Learning");
+    await mkdir(learning);
+    const vaults = [
+      { id: "learning", label: "Learning", prefix: "@learning/", dir: learning, readOnlyFolders: ["raw"] },
+      { id: "qic-uw", label: "QIC Underwriting Agent", prefix: "@qic-uw/", dir: path.join(tmp, "missing"), readOnlyFolders: [] },
+    ];
+    const { service, runner } = setup([ok("[]")], { vaults });
+    await service.run();
+    const args = runner.mock.calls[0]![0].args;
+    const addDir = args.indexOf("--add-dir");
+    expect(args.slice(addDir + 1, addDir + 2)).toEqual([learning]);
+    expect(args[addDir + 2]).toBe("--disallowedTools");
+    const prompt = args[1]!;
+    expect(prompt).toContain("you may read Islam's other note vaults with Read, Glob and Grep, as read-only reference");
+    expect(prompt).toContain(`  Learning: ${learning}`);
+    expect(prompt).not.toContain("QIC Underwriting Agent");
+    expect(prompt).toContain("only read files in this folder and the note vaults above.");
+  });
+
+  it("v1.4: without vaults the prompt keeps the old read scope", () => {
+    const built = buildPrompt({ snapshot: snapshot(), now: NOW, recentlyDismissed: [], recentlyDone: [] });
+    expect(built.prompt).not.toContain("Note vaults");
+    expect(built.prompt).toContain("only read files in this folder.");
   });
 
   it("passes a minimal env without Jira secrets", () => {

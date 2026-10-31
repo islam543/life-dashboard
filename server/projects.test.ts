@@ -54,7 +54,7 @@ function project(id: string, extra: Partial<Project> = {}): Project {
 }
 
 function note(pathName: string, projectId: string | null, updated: string): NoteMeta {
-  return { path: pathName, section: "Meeting notes", title: pathName, created: updated, updated, projectId, tags: [], excerpt: "", openActions: 0 };
+  return { path: pathName, section: "Meeting notes", title: pathName, created: updated, updated, projectId, tags: [], excerpt: "", openActions: 0, vault: "notes", readOnly: false };
 }
 
 describe("ids", () => {

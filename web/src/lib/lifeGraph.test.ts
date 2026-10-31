@@ -470,6 +470,8 @@ describe("buildLifeGraph with the project registry", () => {
               tags: [],
               excerpt: "",
               openActions: 1,
+              vault: "notes",
+              readOnly: false,
             },
           ],
           status: "ok",

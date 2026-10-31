@@ -126,8 +126,8 @@ const PLUGINS = [remarkGfm];
 
 export interface MarkdownPreviewProps {
   markdown: string;
-  /** Flip the task on this 1-based source line. */
-  onToggleTask: (line: number) => void;
+  /** Flip the task on this 1-based source line. Absent (a read-only note): the boxes show but can't be ticked. */
+  onToggleTask?: (line: number) => void;
   /** Shown when the note has no text yet. */
   empty?: string;
 }
@@ -141,7 +141,7 @@ export const MarkdownPreview = memo(function MarkdownPreview({
     return <p className={styles.empty}>{empty}</p>;
   }
   return (
-    <ToggleContext.Provider value={onToggleTask}>
+    <ToggleContext.Provider value={onToggleTask ?? null}>
       <div className={styles.prose}>
         <Markdown remarkPlugins={PLUGINS} components={COMPONENTS}>
           {markdown}

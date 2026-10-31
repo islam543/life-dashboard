@@ -112,3 +112,31 @@ export function StackIcon() {
     </svg>
   );
 }
+
+export function LockIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </svg>
+  );
+}
+
+/** A whole vault (an archive box), for the vault rows in the tree. */
+export function VaultIcon() {
+  return (
+    <svg {...base}>
+      <rect x="2.5" y="3" width="11" height="3.25" rx="1" />
+      <path d="M3.5 6.25v6a1.25 1.25 0 0 0 1.25 1.25h6.5a1.25 1.25 0 0 0 1.25-1.25v-6M6.5 9h3" />
+    </svg>
+  );
+}
+
+export function SearchIcon() {
+  return (
+    <svg {...base}>
+      <circle cx="7" cy="7" r="4" />
+      <path d="M10 10l3.5 3.5" />
+    </svg>
+  );
+}
