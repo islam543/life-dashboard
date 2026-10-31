@@ -1,0 +1,15 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-20T11:30:00.000Z","sessionId":"fixture-a1"}
+{"type":"user","message":{"role":"user","content":"synthetic prompt"},"uuid":"a1-1","timestamp":"2026-10-20T11:31:00.000Z","sessionId":"fixture-a1"}
+this line is not json
+{"type":"summary","summary":"synthetic summary without a timestamp"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"synthetic reply"}]},"uuid":"a1-2","timestamp":"2026-10-20T11:40:00.000Z","sessionId":"fixture-a1"}
+{"type":"file-history-snapshot","snapshot":{"timestamp":"2026-10-20T11:52:00.000Z"}}
+{"type":"user","uuid":"a1-3","timestamp":"2026-10-20T11:53:00.000Z"
+{"type":"user","uuid":"a1-4","timestamp":"yesterday"}
+[{"timestamp":"2026-10-20T11:54:00.000Z"}]
+{"type":"user","uuid":"a1-5","timestamp":"2026-10-20T12:05:00.000Z","sessionId":"fixture-a1"}
+
+{"type":"assistant","uuid":"a1-6","timestamp":"2026-10-20T12:10:00.000Z","sessionId":"fixture-a1"}
+{"type":"attachment","uuid":"a1-7","timestamp":"2026-10-20T11:35:00.000Z","sessionId":"fixture-a1"}
+{"type":"user","uuid":"a1-old-1","timestamp":"2025-06-01T11:30:00.000Z","sessionId":"fixture-a1"}
+{"type":"assistant","uuid":"a1-old-2","timestamp":"2025-06-01T11:40:00.000Z","sessionId":"fixture-a1"}

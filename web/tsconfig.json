@@ -1,0 +1,10 @@
+{
+  // Type check for the browser app. Imports the shared contract from ../shared.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src", "../shared", "vite.config.ts"]
+}

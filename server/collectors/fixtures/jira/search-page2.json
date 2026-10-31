@@ -1,0 +1,85 @@
+{
+  "issues": [
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10120",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10120",
+      "key": "SMP-120",
+      "fields": {
+        "summary": "Migrate quote cache to Redis",
+        "status": {
+          "self": "https://example.atlassian.net/rest/api/3/status/10012",
+          "description": "",
+          "iconUrl": "https://example.atlassian.net/",
+          "name": "En cours",
+          "id": "10012",
+          "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+          }
+        },
+        "priority": {
+          "self": "https://example.atlassian.net/rest/api/3/priority/4",
+          "iconUrl": "https://example.atlassian.net/images/icons/priorities/low.svg",
+          "name": "Low",
+          "id": "4"
+        },
+        "duedate": "2026-12-01",
+        "updated": "2026-10-20T11:30:00.000+0300",
+        "project": {
+          "self": "https://example.atlassian.net/rest/api/3/project/10000",
+          "id": "10000",
+          "key": "SMP",
+          "name": "Sample Project",
+          "projectTypeKey": "software",
+          "simplified": false
+        },
+        "labels": []
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10121",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10121",
+      "key": "SMP-121",
+      "fields": {
+        "summary": "Closed while the search ran",
+        "status": {
+          "self": "https://example.atlassian.net/rest/api/3/status/10001",
+          "description": "",
+          "iconUrl": "https://example.atlassian.net/",
+          "name": "Done",
+          "id": "10001",
+          "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/3",
+            "id": 3,
+            "key": "done",
+            "colorName": "green",
+            "name": "Done"
+          }
+        },
+        "priority": {
+          "self": "https://example.atlassian.net/rest/api/3/priority/3",
+          "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium.svg",
+          "name": "Medium",
+          "id": "3"
+        },
+        "duedate": null,
+        "updated": "2026-10-30T06:10:00.000+0300",
+        "project": {
+          "self": "https://example.atlassian.net/rest/api/3/project/10000",
+          "id": "10000",
+          "key": "SMP",
+          "name": "Sample Project",
+          "projectTypeKey": "software",
+          "simplified": false
+        },
+        "labels": []
+      }
+    }
+  ],
+  "isLast": true
+}

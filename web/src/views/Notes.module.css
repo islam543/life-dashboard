@@ -1,0 +1,163 @@
+/* Notes view layout. Tokens only.
+   Desktop (1080px and up): sections | notes | editor, filling the window under the header; each pane
+   scrolls inside. Tablet (720 to 1079px): sections above notes on the left, editor on the right.
+   Phone (under 720px): one pane at a time, chosen by data-pane, with a back control on top. */
+
+.layout {
+  display: grid;
+  gap: var(--grid-gap);
+  min-width: 0;
+}
+
+.treePane,
+.listPane,
+.editorPane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 0;
+  animation: pane-in var(--dur-slow) var(--ease-out) both;
+}
+
+.listPane {
+  animation-delay: var(--stagger);
+}
+
+.editorPane {
+  animation-delay: calc(2 * var(--stagger));
+}
+
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A Panel that fills its pane, with a body that can scroll. */
+.fill {
+  flex: 1;
+  min-height: 0;
+}
+
+.fillBody {
+  min-height: 0;
+}
+
+.scrollBody {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.inactive {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Phone back control */
+
+.phoneBar {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-min);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: 40px;
+  max-width: 100%;
+  margin-left: calc(-1 * var(--space-2));
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+}
+
+.back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.back svg {
+  flex: none;
+}
+
+.back:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.back:active {
+  transform: scale(0.98);
+}
+
+/* Phone: one pane at a time. */
+@media (max-width: 719px) {
+  .layout[data-pane="sections"] .listPane,
+  .layout[data-pane="sections"] .editorPane,
+  .layout[data-pane="notes"] .treePane,
+  .layout[data-pane="notes"] .editorPane,
+  .layout[data-pane="editor"] .treePane,
+  .layout[data-pane="editor"] .listPane {
+    display: none;
+  }
+
+  .treePane,
+  .listPane,
+  .editorPane {
+    animation-delay: 0ms;
+  }
+}
+
+/* Tablet: sections over notes on the left, the editor on the right. */
+@media (min-width: 720px) {
+  .layout {
+    --notes-height: max(560px, calc(100dvh - var(--notes-top, 200px) - var(--space-12)));
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+    grid-template-areas:
+      "tree editor"
+      "list editor";
+    height: var(--notes-height);
+  }
+
+  .treePane {
+    grid-area: tree;
+    max-height: calc(var(--notes-height) * 0.45);
+  }
+
+  .listPane {
+    grid-area: list;
+  }
+
+  .editorPane {
+    grid-area: editor;
+  }
+}
+
+/* Desktop: three panes side by side. */
+@media (min-width: 1080px) {
+  .layout {
+    grid-template-columns: minmax(220px, 252px) minmax(280px, 360px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "tree list editor";
+  }
+
+  .treePane {
+    max-height: none;
+  }
+}

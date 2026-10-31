@@ -1,0 +1,6 @@
+{
+  // Type check for the Node side: server code, its tests, the shared contract and the vitest config.
+  // Used by `npm run typecheck`. The server runs from source with tsx, so nothing is emitted.
+  "extends": "./tsconfig.json",
+  "include": ["server", "shared", "vitest.config.ts"]
+}

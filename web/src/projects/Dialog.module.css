@@ -1,0 +1,424 @@
+/* Modal dialogs of the project tracker (New project, Delete project). Same frame as the check-in
+   dialog: native <dialog>, dimmed backdrop, HUD corner ticks. Tokens only. */
+
+.dialog {
+  --pad-x: var(--space-6);
+  width: min(560px, calc(100vw - 2 * var(--space-4)));
+  max-width: none;
+  max-height: calc(100dvh - 2 * var(--space-4));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse 70% 120px at 50% 0%, var(--accent-soft), transparent 100%),
+    linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-surface) 220px, var(--bg-surface) 100%);
+  color: var(--text);
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .dialog[open] {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.dialog::backdrop {
+  opacity: 0;
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.dialog[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+.dialog::before,
+.dialog::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+  border-color: var(--accent-line);
+  border-style: solid;
+}
+
+.dialog::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+  border-top-left-radius: var(--radius-lg);
+}
+
+.dialog::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 1px 1px 0;
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.danger {
+  border-color: var(--danger-line);
+  background:
+    radial-gradient(ellipse 70% 120px at 50% 0%, var(--danger-soft), transparent 100%),
+    linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-surface) 220px, var(--bg-surface) 100%);
+}
+
+.danger::before,
+.danger::after {
+  border-color: var(--danger-line);
+}
+
+:global(html):has(.dialog[open]) {
+  overflow: hidden;
+}
+
+.form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--pad-x) var(--space-2);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.close {
+  margin-right: calc(-1 * var(--space-2));
+  color: var(--text-muted);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2) var(--pad-x) var(--space-4);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--pad-x) var(--space-4);
+  border-top: var(--hairline) solid var(--divider);
+  background: var(--bg-surface);
+}
+
+.footNote {
+  flex: 1 1 200px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- Fields ---------- */
+
+.field {
+  display: grid;
+  gap: var(--space-1-5);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 0;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.field:focus-within > .label {
+  color: var(--accent);
+}
+
+.optional {
+  color: var(--text-faint);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.counter {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.counter[data-over] {
+  color: var(--danger);
+}
+
+/* Radio cards for area and status: real radios, styled as a segmented row. */
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+}
+
+.choice {
+  position: relative;
+  display: inline-flex;
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.choice span {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.choice input:hover + span {
+  border-color: var(--accent-line);
+}
+
+.choice input:checked + span {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: var(--glow-accent);
+}
+
+.choice input:focus-visible + span {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Untracked names to fold in. */
+.sourceBox {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sourceList {
+  display: grid;
+  gap: var(--space-0-5);
+  max-height: 220px;
+  margin: 0;
+  padding: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  list-style: none;
+}
+
+.sourceItem label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.sourceItem label:hover {
+  background: var(--bg-hover);
+}
+
+.sourceItem input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.sourceName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceFacts {
+  flex: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sourceNone {
+  padding: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Error summary at the top of the form. */
+.summary {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: var(--hairline) solid var(--danger-line);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+}
+
+.summary:focus-visible {
+  outline-offset: 2px;
+}
+
+.summaryLink {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.summaryLink:hover {
+  color: var(--text-strong);
+}
+
+/* Delete confirm: what happens, as a short list. */
+.consequences {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.consequences li {
+  display: flex;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+}
+
+.consequences li::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 0.6em;
+  border-radius: 1px;
+  background: var(--text-muted);
+  transform: rotate(45deg);
+}
+
+.consequences li[data-tone="danger"]::before {
+  background: var(--danger);
+}
+
+.names {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 560px) {
+  .dialog {
+    --pad-x: var(--space-4);
+    width: calc(100vw - 2 * var(--space-2));
+    max-height: calc(100dvh - 2 * var(--space-2));
+  }
+
+  .title {
+    font-size: var(--fs-lg);
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .foot > * {
+    flex: 1 1 auto;
+  }
+}

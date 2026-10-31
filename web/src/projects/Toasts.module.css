@@ -1,0 +1,62 @@
+/* Toasts for the Projects view. Tokens only. */
+
+.region {
+  position: fixed;
+  right: var(--gutter);
+  bottom: var(--space-5);
+  left: var(--gutter);
+  z-index: var(--z-overlay);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  width: min(460px, 100%);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: var(--hairline) solid var(--border-strong);
+  border-left: 2px solid var(--accent-line);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-raised);
+  pointer-events: auto;
+}
+
+.toast[data-tone="success"] {
+  border-left-color: var(--accent);
+}
+
+.toast[data-tone="error"] {
+  border-color: var(--danger-line);
+  border-left-color: var(--danger);
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.action {
+  flex: none;
+}
+
+.close {
+  flex: none;
+  color: var(--text-muted);
+}

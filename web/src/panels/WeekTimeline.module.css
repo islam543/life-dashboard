@@ -1,0 +1,422 @@
+.host {
+  position: relative;
+  min-width: 0;
+}
+
+/* Header, bars and item lanes share one set of column backgrounds. */
+.board {
+  position: relative;
+  isolation: isolate;
+}
+
+.cols {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.col,
+.laneBg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-md);
+  animation: col-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes col-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.past {
+  border: var(--hairline) solid var(--divider);
+  background: linear-gradient(180deg, var(--grid-line), transparent 90%);
+}
+
+.future {
+  border: var(--hairline) dashed var(--divider);
+}
+
+.todayCol {
+  border: var(--hairline) solid var(--accent-line);
+  background: linear-gradient(180deg, var(--accent-soft), transparent 75%);
+  box-shadow: inset 0 0 24px 0 var(--accent-soft);
+}
+
+/* A lit bar across the top of today. */
+.todayCol::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 22%;
+  right: 22%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+.laneBg {
+  border: var(--hairline) solid var(--danger-line);
+  background: linear-gradient(180deg, var(--danger-soft), transparent 85%);
+}
+
+.svg {
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+}
+
+/* ---------- SVG text and marks ---------- */
+
+.dayName,
+.dayNameToday,
+.laneLabel {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+}
+
+.dayName {
+  fill: var(--text-muted);
+}
+
+.dayNameToday {
+  fill: var(--accent);
+}
+
+.laneLabel {
+  fill: var(--danger);
+}
+
+.date,
+.datePast,
+.dateToday,
+.laneCount {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  fill: var(--text);
+}
+
+.datePast {
+  fill: var(--text-muted);
+}
+
+.dateToday {
+  fill: var(--accent-strong);
+  font-weight: var(--fw-semibold);
+}
+
+.laneCount {
+  fill: var(--danger);
+  font-weight: var(--fw-semibold);
+}
+
+.grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.baseline {
+  fill: none;
+  stroke: var(--accent-line);
+  stroke-width: 1;
+}
+
+.barTop {
+  stop-color: var(--accent);
+  stop-opacity: 0.9;
+}
+
+.barBottom {
+  stop-color: var(--accent);
+  stop-opacity: 0.14;
+}
+
+.bar {
+  opacity: 0.75;
+}
+
+.barToday {
+  filter: drop-shadow(0 0 6px var(--accent-line));
+}
+
+.value,
+.valueToday,
+.valueZero {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.value {
+  fill: var(--text);
+}
+
+.valueToday {
+  fill: var(--accent-strong);
+}
+
+.valueZero {
+  fill: var(--text-faint);
+}
+
+.pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ---------- Item lanes (wide) ---------- */
+
+.lanes {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-items: start;
+  padding: var(--space-2) 0 var(--space-3);
+}
+
+.laneCell {
+  min-width: 0;
+  padding: 0 var(--space-1);
+}
+
+.chips {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.chip {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-left: 2px solid var(--accent-line);
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  text-decoration: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+a.chip:hover {
+  border-color: var(--accent-line);
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+a.chip:active {
+  transform: scale(0.98);
+}
+
+.due-overdue,
+.due-today {
+  border-left-color: var(--danger);
+}
+
+.due-overdue {
+  background: linear-gradient(90deg, var(--danger-soft), var(--bg-raised) 70%);
+}
+
+.due-soon {
+  border-left-color: var(--warn);
+}
+
+.due-later {
+  border-left-color: var(--accent-line);
+}
+
+.event {
+  border-left-color: var(--cat-2);
+}
+
+.chipHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.chipKey {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.late {
+  margin-left: auto;
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.chipTime {
+  color: var(--cat-4);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.chipTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+a.chip:hover .chipTitle {
+  color: var(--text);
+}
+
+/* Items arrive just after the bars, one by one. Only added when motion is allowed. */
+.chipIn {
+  animation: chip-in var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--dur-slow) + var(--i, 0) * var(--stagger));
+}
+
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.more {
+  width: 100%;
+  min-height: var(--target-min);
+  padding: 0 var(--space-1-5);
+  border: var(--hairline) dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-align: left;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.more:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+/* ---------- Agenda (narrow) ---------- */
+
+.agenda {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agendaRow {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-sm);
+}
+
+.agendaRow .chips {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.agendaOverdue {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+.agendaToday {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.agendaDay {
+  padding-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.agendaOverdue .agendaDay {
+  color: var(--danger);
+}
+
+.agendaToday .agendaDay {
+  color: var(--accent);
+}
+
+.agendaCount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Notes under the chart ---------- */
+
+.notes {
+  display: grid;
+  gap: var(--space-1-5);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.noteLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.noteLine > span:first-child {
+  position: relative;
+  top: 1px;
+}
+
+.noteMuted {
+  color: var(--text-faint);
+}

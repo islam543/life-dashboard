@@ -1,0 +1,158 @@
+/* Rendered markdown. Calm reading type on the panel surface. Tokens only. */
+
+.prose {
+  max-width: 76ch;
+  color: var(--text);
+  font-size: var(--fs-md);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.prose > :first-child {
+  margin-top: 0;
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
+}
+
+.prose :where(p, ul, ol, blockquote, pre, .tableWrap) {
+  margin: 0 0 var(--space-3);
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6) {
+  margin: var(--space-6) 0 var(--space-2);
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+}
+
+.prose h1 {
+  font-size: var(--fs-xl);
+}
+
+.prose h2 {
+  padding-bottom: var(--space-1-5);
+  border-bottom: var(--hairline) solid var(--divider);
+  font-size: var(--fs-lg);
+}
+
+.prose :where(h3, h4, h5, h6) {
+  font-size: var(--fs-md);
+}
+
+.prose :where(ul, ol) {
+  padding-inline-start: var(--space-6);
+}
+
+.prose li + li {
+  margin-top: var(--space-1);
+}
+
+.prose li > :where(ul, ol) {
+  margin: var(--space-1) 0 0;
+}
+
+/* Task items: the checkbox sits in the bullet's place. */
+.prose :global(.contains-task-list) {
+  padding-inline-start: var(--space-1);
+  list-style: none;
+}
+
+.prose :global(.contains-task-list) :global(.contains-task-list) {
+  padding-inline-start: var(--space-6);
+}
+
+.prose :global(.task-list-item) > p {
+  margin: 0;
+}
+
+.check {
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+[dir="rtl"] > .check,
+[dir="rtl"] .check {
+  margin: 0 0 0 var(--space-2);
+}
+
+.prose :global(.task-list-item):has(> .check:checked),
+.prose :global(.task-list-item):has(> p > .check:checked) {
+  color: var(--text-muted);
+}
+
+.prose a {
+  color: var(--accent);
+}
+
+.prose blockquote {
+  padding: var(--space-1) var(--space-4);
+  border-inline-start: 2px solid var(--accent-line);
+  color: var(--text-muted);
+}
+
+.prose code {
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.prose pre {
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  overflow-wrap: normal;
+}
+
+.prose pre code {
+  padding: 0;
+  background: none;
+}
+
+.prose hr {
+  margin: var(--space-6) 0;
+  border: 0;
+  border-top: var(--hairline) solid var(--divider);
+}
+
+.tableWrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.prose table {
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.prose :where(th, td) {
+  padding: var(--space-1-5) var(--space-3);
+  border: var(--hairline) solid var(--divider);
+  text-align: start;
+}
+
+.prose th {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+  background: var(--bg-surface-top);
+}
+
+.imageNote {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}

@@ -1,0 +1,164 @@
+{
+  "issues": [
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10101",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10101",
+      "key": "SMP-101",
+      "fields": {
+        "summary": "Fix premium rounding in quote API",
+        "status": {
+          "self": "https://example.atlassian.net/rest/api/3/status/3",
+          "description": "This issue is being actively worked on.",
+          "iconUrl": "https://example.atlassian.net/images/icons/statuses/inprogress.png",
+          "name": "In Progress",
+          "id": "3",
+          "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+          }
+        },
+        "priority": {
+          "self": "https://example.atlassian.net/rest/api/3/priority/2",
+          "iconUrl": "https://example.atlassian.net/images/icons/priorities/high.svg",
+          "name": "High",
+          "id": "2"
+        },
+        "duedate": "2026-11-02",
+        "updated": "2026-10-28T09:15:22.123+0300",
+        "project": {
+          "self": "https://example.atlassian.net/rest/api/3/project/10000",
+          "id": "10000",
+          "key": "SMP",
+          "name": "Sample Project",
+          "projectTypeKey": "software",
+          "simplified": false,
+          "avatarUrls": {
+            "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10400"
+          }
+        },
+        "labels": ["backend"]
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10102",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10102",
+      "key": "SMP-102",
+      "fields": {
+        "summary": "Write UAT checklist",
+        "status": {
+          "self": "https://example.atlassian.net/rest/api/3/status/10000",
+          "description": "",
+          "iconUrl": "https://example.atlassian.net/",
+          "name": "To Do",
+          "id": "10000",
+          "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+            "id": 2,
+            "key": "new",
+            "colorName": "blue-gray",
+            "name": "To Do"
+          }
+        },
+        "priority": null,
+        "duedate": null,
+        "updated": "2026-10-29T14:02:10.000+0000",
+        "project": {
+          "self": "https://example.atlassian.net/rest/api/3/project/10000",
+          "id": "10000",
+          "key": "SMP",
+          "name": "Sample Project",
+          "projectTypeKey": "software",
+          "simplified": false
+        },
+        "labels": []
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "20007",
+      "self": "https://example.atlassian.net/rest/api/3/issue/20007",
+      "key": "OPS-7",
+      "fields": {
+        "summary": "Rotate staging certificates",
+        "status": {
+          "self": "https://example.atlassian.net/rest/api/3/status/10010",
+          "description": "",
+          "iconUrl": "https://example.atlassian.net/",
+          "name": "قيد المراجعة",
+          "id": "10010",
+          "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+          }
+        },
+        "priority": {
+          "self": "https://example.atlassian.net/rest/api/3/priority/3",
+          "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium.svg",
+          "name": "Medium",
+          "id": "3"
+        },
+        "duedate": "2026-10-31",
+        "updated": "2026-10-27T08:00:00.000-0500",
+        "project": {
+          "self": "https://example.atlassian.net/rest/api/3/project/10020",
+          "id": "10020",
+          "key": "OPS",
+          "name": "Ops Board",
+          "projectTypeKey": "software",
+          "simplified": true
+        },
+        "labels": ["infra", "Blocked-by-vendor"]
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10110",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10110",
+      "key": "SMP-110",
+      "fields": {
+        "summary": "Payment gateway sandbox access",
+        "status": {
+          "self": "https://example.atlassian.net/rest/api/3/status/10011",
+          "description": "",
+          "iconUrl": "https://example.atlassian.net/",
+          "name": "Blocked",
+          "id": "10011",
+          "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+            "id": 2,
+            "key": "new",
+            "colorName": "blue-gray",
+            "name": "To Do"
+          }
+        },
+        "priority": {
+          "self": "https://example.atlassian.net/rest/api/3/priority/1",
+          "iconUrl": "https://example.atlassian.net/images/icons/priorities/highest.svg",
+          "name": "Highest",
+          "id": "1"
+        },
+        "duedate": "2026-11-15",
+        "updated": "2026-10-30T05:45:00.000+0300",
+        "project": {
+          "self": "https://example.atlassian.net/rest/api/3/project/10000",
+          "id": "10000",
+          "key": "SMP",
+          "name": "Sample Project",
+          "projectTypeKey": "software",
+          "simplified": false
+        },
+        "labels": []
+      }
+    }
+  ],
+  "nextPageToken": "CAEaAggD",
+  "isLast": false
+}

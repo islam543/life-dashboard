@@ -1,0 +1,307 @@
+import { AnimatePresence, motion } from "motion/react";
+import { useId, useMemo, useRef, useState } from "react";
+import type { DetectedProject, Project, ProjectsState } from "../../../shared/types";
+import { errorMessage } from "../api";
+import { projectsApi } from "../api/projects";
+import { MOTION } from "../hooks/useReducedMotion";
+import { plural } from "../lib/format";
+import { projectHash } from "../lib/route";
+import { addedProject, detectedFacts, displayName, rankProjectsFor, seenText, trackInput, withSource, STATUS_LABEL } from "../lib/projects";
+import { Button } from "../ui/Button";
+import { EmptyState } from "../ui/EmptyState";
+import { Panel, type PanelStatus } from "../ui/Panel";
+import { ChevronIcon, FoldIcon, HideIcon, TrackIcon } from "./icons";
+import { handOffFocus, KindIcon } from "./parts";
+import { Picker } from "./Picker";
+import { useToasts } from "./Toasts";
+import type { ProjectsStore } from "./useProjects";
+import styles from "./UntrackedTray.module.css";
+
+// Curation: auto-detected session and repo names active in the last 90 days that belong to no
+// project. Track one (it becomes a project), add it to a project (it becomes one of that project's
+// sources), or hide it (it leaves this list and every chart). Hidden names are listed under the tray
+// with Unhide. The server answers every action with the fresh registry.
+
+const FIRST_ROWS = 12;
+
+export interface UntrackedTrayProps {
+  store: ProjectsStore;
+  status: PanelStatus;
+  /** A project was created by Track: the board pulses its card. */
+  onTracked: (projectId: string) => void;
+}
+
+/** Optimistic local copy: the name leaves `untracked` at once. */
+function withoutUntracked(s: ProjectsState, d: DetectedProject): ProjectsState {
+  return { ...s, untracked: s.untracked.filter((u) => !(u.name === d.name && u.kind === d.kind)) };
+}
+
+export function UntrackedTray({ store, status, onTracked }: UntrackedTrayProps) {
+  const state = store.state;
+  const count = state?.untracked.length ?? 0;
+  return (
+    <Panel
+      title="Untracked"
+      {...status}
+      notice={undefined}
+      skeleton="rows"
+      meta={state ? String(count) : undefined}
+      className={styles.panel}
+    >
+      {state ? <TrayBody store={store} state={state} onTracked={onTracked} /> : null}
+    </Panel>
+  );
+}
+
+function TrayBody({ store, state, onTracked }: { store: ProjectsStore; state: ProjectsState; onTracked: (id: string) => void }) {
+  const toasts = useToasts();
+  const [showAll, setShowAll] = useState(false);
+  const [busy, setBusy] = useState<Record<string, "track" | "add" | "hide" | undefined>>({});
+  const items = state.untracked;
+  const shown = showAll ? items : items.slice(0, FIRST_ROWS);
+  const keyOf = (d: Pick<DetectedProject, "name" | "kind">) => `${d.kind}:${d.name}`;
+  const setBusyFor = (d: DetectedProject, what: "track" | "add" | "hide" | undefined) =>
+    setBusy((b) => ({ ...b, [keyOf(d)]: what }));
+  const listRef = useRef<HTMLUListElement>(null);
+
+  /** The row is about to leave the list: move focus to the next row's Track button so the keyboard keeps its place. */
+  const keepFocus = (d: DetectedProject) => {
+    const rows = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-untracked]") ?? [])];
+    const i = rows.findIndex((r) => r.dataset.untracked === keyOf(d));
+    const next = rows[i + 1] ?? rows[i - 1];
+    handOffFocus(rows[i], next?.querySelector<HTMLElement>("[data-part=track]") ?? document.getElementById("main"));
+  };
+
+  const track = async (d: DetectedProject) => {
+    keepFocus(d);
+    setBusyFor(d, "track");
+    try {
+      const next = await store.write(() => projectsApi.create(trackInput(d)), (s) => withoutUntracked(s, d));
+      const created = addedProject(state.projects, next.projects);
+      if (created) onTracked(created.id);
+      toasts.push({
+        tone: "success",
+        message: `Tracking ${created?.name ?? displayName(d.name)} as a new project.`,
+        action: created ? { label: "Open", onAction: () => (window.location.hash = projectHash(created.id)) } : undefined,
+      });
+    } catch (err) {
+      toasts.push({ tone: "error", message: `Couldn't track ${displayName(d.name)}. ${errorMessage(err)}` });
+    } finally {
+      setBusyFor(d, undefined);
+    }
+  };
+
+  const addTo = async (d: DetectedProject, project: Project) => {
+    keepFocus(d);
+    setBusyFor(d, "add");
+    try {
+      await store.write(
+        () => projectsApi.update(project.id, { sources: withSource(project.sources, d) }),
+        (s) => ({
+          ...withoutUntracked(s, d),
+          projects: s.projects.map((p) => (p.id === project.id ? { ...p, sources: withSource(p.sources, d) } : p)),
+        }),
+      );
+      toasts.push({ tone: "success", message: `Added ${displayName(d.name)} to ${project.name}. Its time and commits count there now.` });
+    } catch (err) {
+      toasts.push({ tone: "error", message: `Couldn't add ${displayName(d.name)} to ${project.name}. ${errorMessage(err)}` });
+    } finally {
+      setBusyFor(d, undefined);
+    }
+  };
+
+  const hide = async (d: DetectedProject) => {
+    keepFocus(d);
+    setBusyFor(d, "hide");
+    try {
+      await store.write(
+        () => projectsApi.hide(d.name),
+        (s) => ({ ...withoutUntracked(s, d), hidden: s.hidden.includes(d.name) ? s.hidden : [...s.hidden, d.name] }),
+      );
+      toasts.push({
+        message: `Hid ${displayName(d.name)}. It no longer counts in charts.`,
+        action: { label: "Undo", onAction: () => void unhide(d.name) },
+      });
+    } catch (err) {
+      toasts.push({ tone: "error", message: `Couldn't hide ${displayName(d.name)}. ${errorMessage(err)}` });
+    } finally {
+      setBusyFor(d, undefined);
+    }
+  };
+
+  const unhide = async (name: string) => {
+    try {
+      await store.write(
+        () => projectsApi.unhide(name),
+        (s) => ({ ...s, hidden: s.hidden.filter((h) => h !== name) }),
+      );
+      toasts.push({ message: `Unhid ${displayName(name)}. It shows in Untracked again if it was active in the last 90 days.` });
+    } catch (err) {
+      toasts.push({ tone: "error", message: `Couldn't unhide ${displayName(name)}. ${errorMessage(err)}` });
+    }
+  };
+
+  return (
+    <div className={styles.body}>
+      {items.length === 0 ? (
+        <EmptyState
+          tone="ok"
+          size="inline"
+          title="Nothing untracked."
+          body="Every session and repo active in the last 90 days belongs to a project or is hidden."
+        />
+      ) : (
+        <>
+          <p className={styles.intro}>Active in the last 90 days and in no project. Track, fold into a project, or hide.</p>
+          <ul ref={listRef} className={styles.list}>
+            <AnimatePresence initial={false}>
+              {shown.map((d) => (
+                <motion.li
+                  key={keyOf(d)}
+                  data-untracked={keyOf(d)}
+                  className={styles.item}
+                  layout="position"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, x: 12, transition: { duration: MOTION.fast } }}
+                  transition={{ duration: MOTION.base, ease: MOTION.easeOut }}
+                >
+                  <UntrackedRow
+                    item={d}
+                    projects={state.projects}
+                    busy={busy[keyOf(d)]}
+                    onTrack={() => void track(d)}
+                    onAdd={(p) => void addTo(d, p)}
+                    onHide={() => void hide(d)}
+                  />
+                </motion.li>
+              ))}
+            </AnimatePresence>
+          </ul>
+          {items.length > FIRST_ROWS ? (
+            <Button variant="ghost" size="sm" className={styles.more} onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
+              {showAll ? "Show fewer" : `Show all ${items.length}`}
+            </Button>
+          ) : null}
+        </>
+      )}
+      <HiddenList names={state.hidden} onUnhide={(n) => void unhide(n)} />
+    </div>
+  );
+}
+
+function UntrackedRow({
+  item,
+  projects,
+  busy,
+  onTrack,
+  onAdd,
+  onHide,
+}: {
+  item: DetectedProject;
+  projects: readonly Project[];
+  busy: "track" | "add" | "hide" | undefined;
+  onTrack: () => void;
+  onAdd: (p: Project) => void;
+  onHide: () => void;
+}) {
+  const name = displayName(item.name);
+  const options = useMemo(
+    () =>
+      rankProjectsFor(item.name, projects).map(({ project, suggested }) => ({
+        value: project.id,
+        label: project.name,
+        detail: `${STATUS_LABEL[project.status]}, ${plural(project.sources.sessions.length + project.sources.repos.length, "source")}`,
+        badge: suggested ? "Same name" : undefined,
+      })),
+    [item.name, projects],
+  );
+  return (
+    <>
+      <div className={styles.head}>
+        <KindIcon kind={item.kind} />
+        <span className={styles.name} dir="auto" title={item.name}>
+          {item.name !== name ? <span className={styles.owner}>{item.name.slice(0, item.name.length - name.length)}</span> : null}
+          {name}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<HideIcon />}
+          className={styles.hide}
+          onClick={onHide}
+          loading={busy === "hide"}
+          disabled={!!busy && busy !== "hide"}
+          aria-label={`Hide ${name} from projects and charts`}
+          title="Hide from projects and charts"
+        />
+      </div>
+      <p className={styles.facts}>
+        {detectedFacts(item)}
+        {item.lastSeen ? <span className={styles.seen}>, last seen {seenText(item.lastSeen, new Date())}</span> : null}
+      </p>
+      <div className={styles.actions}>
+        <Button size="sm" icon={<TrackIcon />} data-part="track" onClick={onTrack} loading={busy === "track"} loadingLabel="Tracking" disabled={!!busy && busy !== "track"} aria-label={`Track ${name} as a new project`}>
+          Track
+        </Button>
+        <Picker
+          label="Add to project"
+          ariaLabel={`Add to project: ${name}`}
+          icon={<FoldIcon />}
+          searchLabel="Find a project"
+          options={options}
+          empty="No projects yet. Use Track to start one."
+          onPick={(id) => {
+            const p = projects.find((x) => x.id === id);
+            if (p) onAdd(p);
+          }}
+          loading={busy === "add"}
+          disabled={!!busy && busy !== "add"}
+        />
+      </div>
+    </>
+  );
+}
+
+function HiddenList({ names, onUnhide }: { names: readonly string[]; onUnhide: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const listId = `hidden-${useId().replace(/:/g, "")}`;
+  if (names.length === 0) return null;
+  const sorted = [...names].sort((a, b) => displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" }));
+  return (
+    <div className={styles.hidden}>
+      <button type="button" className={styles.hiddenToggle} aria-expanded={open} aria-controls={listId} onClick={() => setOpen((v) => !v)}>
+        <span className={styles.chevron} data-open={open || undefined}>
+          <ChevronIcon />
+        </span>
+        Hidden <span className={styles.count}>{names.length}</span>
+      </button>
+      <ul id={listId} className={styles.hiddenList} hidden={!open}>
+        {sorted.map((n) => (
+          <li key={n} className={styles.hiddenItem}>
+            <span className={styles.hiddenName} dir="auto" title={n}>
+              {n}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              data-part="unhide"
+              aria-label={`Unhide ${displayName(n)}`}
+              onClick={(e) => {
+                // The row leaves (and the whole list when it was the last one): keep focus nearby.
+                const row = e.currentTarget.closest("li");
+                const sibling = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-part=unhide]");
+                const tray = e.currentTarget.closest("section");
+                handOffFocus(row, sibling ?? tray?.querySelector<HTMLElement>("[data-part=track]") ?? document.getElementById("main"));
+                onUnhide(n);
+              }}
+            >
+              Unhide
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {open ? <p className={styles.hiddenHint}>Hidden names stay out of Untracked, the time bars and the life map.</p> : null}
+    </div>
+  );
+}

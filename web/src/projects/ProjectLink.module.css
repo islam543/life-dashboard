@@ -1,0 +1,17 @@
+/* A project name that links to #/projects/<id> inside a chart row (the time bars). It keeps the
+   row's own type and colour, and shows it is a link on hover and focus. Tokens only. */
+
+.link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-xs);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}

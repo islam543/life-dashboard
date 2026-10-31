@@ -1,0 +1,206 @@
+/* Small parts shared by the board, the detail view and the dialogs. Tokens only. */
+
+/* Area chip: a coloured dot plus the word, so the colour is never the only cue. Area colours come
+   from the categorical series (never red, amber or violet, which carry meaning). */
+.area {
+  --area: var(--cat-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.area::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--area);
+  box-shadow: 0 0 6px var(--area);
+}
+
+.area[data-area="learning"] {
+  --area: var(--cat-3);
+}
+
+.area[data-area="personal"] {
+  --area: var(--cat-4);
+}
+
+/* Deadline and due-date badge. Shape (diamond, triangle) and words carry the urgency, colour repeats it. */
+.due {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  white-space: nowrap;
+}
+
+.due[data-tone="danger"] {
+  color: var(--danger);
+}
+
+.due[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.dueIcon {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+}
+
+.dueIcon svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Task progress: a thin track with a glowing fill that grows in. */
+.progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--chart-grid);
+}
+
+.progressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  box-shadow: var(--glow-accent);
+  transform-origin: left center;
+}
+
+.progressFill[data-complete] {
+  background: var(--accent);
+}
+
+/* A destructive button: the Button component has no danger variant, so this restyles a secondary one. */
+.danger {
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--text-strong);
+}
+
+.dangerSolid {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-accent);
+  box-shadow: var(--glow-danger);
+}
+
+.dangerSolid:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--on-accent);
+  filter: brightness(1.08);
+}
+
+/* Form fields. */
+.input,
+.textarea {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.textarea {
+  min-height: 84px;
+  padding: var(--space-2) var(--space-3);
+  line-height: var(--lh-base);
+  resize: vertical;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.input:hover,
+.textarea:hover {
+  border-color: var(--accent-line);
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline-offset: 1px;
+}
+
+.input[aria-invalid="true"],
+.textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.input[type="date"] {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color-scheme: dark;
+}
+
+.fieldError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1-5);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+/* Small letter-spaced heading inside a panel. */
+.kicker {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.kindIcon {
+  display: inline-grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.kindIcon svg {
+  width: 14px;
+  height: 14px;
+}

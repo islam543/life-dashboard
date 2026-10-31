@@ -1,0 +1,186 @@
+.panel {
+  --panel-accent: var(--accent-line);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--panel-pad);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--bg-surface-top) 0%, var(--bg-surface) 64px, var(--bg-surface) 100%);
+  box-shadow: var(--shadow-panel);
+  isolation: isolate;
+}
+
+/* HUD corner ticks: thin L-shapes, top-left and bottom-right. Decorative only. */
+.panel::before,
+.panel::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  border-color: var(--panel-accent);
+  border-style: solid;
+}
+
+.panel::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+  border-top-left-radius: var(--radius-lg);
+}
+
+.panel::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 1px 1px 0;
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.ai {
+  --panel-accent: var(--ai-line);
+  background:
+    radial-gradient(ellipse 60% 40% at 0% 0%, var(--ai-soft), transparent 70%),
+    linear-gradient(180deg, var(--bg-surface-top) 0%, var(--bg-surface) 64px, var(--bg-surface) 100%);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--target-min);
+  margin-bottom: var(--space-3);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: var(--lh-snug);
+}
+
+.titleButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--target-min);
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.titleButton svg {
+  opacity: 0.6;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+.titleButton:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.titleButton:hover svg,
+.titleButton:focus-visible svg {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.problem {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  min-width: 0;
+}
+
+.problemTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  overflow-wrap: anywhere;
+}
+
+.problemHint {
+  max-width: 64ch;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+/* The exact step to connect a source, set off like an instruction. */
+.instruction {
+  max-width: 64ch;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px dashed var(--border-strong);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.retry {
+  margin-top: var(--space-1);
+}
+
+.notice {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.notice > span:first-child {
+  position: relative;
+  top: 1px;
+}

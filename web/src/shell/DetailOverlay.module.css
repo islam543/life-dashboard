@@ -1,0 +1,125 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: grid;
+  padding: clamp(var(--space-2), 3vw, var(--space-8));
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-backdrop);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--page-max);
+  height: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-surface) 180px, var(--bg-surface) 100%);
+  box-shadow: var(--shadow-raised);
+}
+
+/* Same HUD corner ticks as panels, so the card reads as the tile grown up. */
+.card::before,
+.card::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+  border-color: var(--accent-line);
+  border-style: solid;
+}
+
+.card::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+  border-top-left-radius: var(--radius-lg);
+}
+
+.card::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 1px 1px 0;
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--panel-pad);
+  border-bottom: 1px solid var(--divider);
+}
+
+.back {
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.title:focus-visible {
+  outline-offset: 4px;
+}
+
+.title:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.hint {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hint kbd {
+  display: inline-block;
+  margin-right: var(--space-1);
+  padding: 1px var(--space-1-5);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--panel-pad);
+}
+
+@media (max-width: 720px) {
+  .hint {
+    display: none;
+  }
+}

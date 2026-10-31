@@ -1,0 +1,696 @@
+/* Life map (#/map). Tokens only. Dark control-room look: glowing nodes on a sunken stage, thin links,
+   faint range rings. Colour never carries meaning alone: halos also get a badge shape, not-connected
+   areas a dashed outline, idle nodes a smaller size and muted label. */
+
+.body {
+  gap: var(--space-4);
+}
+
+/* ---- Readout: one cell per area, above the map ---- */
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+/* Hairlines on the left and top of every cell; the frame's overflow clips the outer ones. */
+.reading {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  box-shadow:
+    -1px 0 0 0 var(--divider),
+    0 -1px 0 0 var(--divider);
+}
+
+.readName {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.readValue {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+}
+
+.readText {
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
+  padding: var(--space-0-5) 0;
+}
+
+.reading[data-off] .readText,
+.reading[data-idle] .readValue {
+  color: var(--text-muted);
+}
+
+.readSub {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.readAlert {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.readAlert[data-urgency="amber"] {
+  color: var(--warn);
+}
+
+@media (max-width: 1099px) {
+  .readout {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 559px) {
+  .readout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reading {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .readValue {
+    font-size: var(--fs-lg);
+  }
+}
+
+/* ---- Stage ---- */
+
+.frame {
+  position: relative;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.stage {
+  position: relative;
+  /* Fills the rest of the window under the header, panel title and readout. */
+  height: clamp(440px, calc(100dvh - 420px), 780px);
+  min-width: 0;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(ellipse 55% 60% at 50% 50%, var(--ambient-top), transparent 72%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, var(--ambient-corner), transparent 70%),
+    var(--bg-sunken);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* One finger scrolls the page; d3-zoom handles two-finger pan and pinch. */
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.svg:active,
+.svg[data-dragging],
+.svg[data-dragging] .node {
+  cursor: grabbing;
+}
+
+.rings circle {
+  fill: none;
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+
+/* ---- Links ---- */
+
+.link {
+  stroke: var(--accent-line);
+  stroke-width: 1;
+  stroke-linecap: round;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    stroke var(--dur-fast) var(--ease-out);
+}
+
+.link[data-idle] {
+  stroke: var(--border-strong);
+}
+
+.link[data-dashed] {
+  stroke: var(--text-faint);
+  stroke-dasharray: 3 4;
+}
+
+.link[data-hot] {
+  stroke: var(--accent);
+}
+
+.link[data-dim] {
+  opacity: 0.2;
+}
+
+/* ---- Nodes ---- */
+
+.nodes[data-hidden] {
+  visibility: hidden;
+}
+
+.node {
+  outline: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* Only the map's nodes animate in and take the pointer; legend swatches reuse the look. */
+.nodes .node {
+  cursor: pointer;
+  animation: node-in var(--dur-slow) var(--ease-out) backwards;
+  animation-delay: calc(var(--enter, 0) * var(--stagger) * 2);
+}
+
+.node:focus,
+.node:focus-visible {
+  outline: none;
+}
+
+.node[data-dim] {
+  opacity: 0.22;
+}
+
+@keyframes node-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Generous transparent target so small nodes are still 24px to hit. */
+.hit {
+  fill: transparent;
+}
+
+.shape {
+  fill: var(--bg-raised);
+  stroke: var(--accent-line);
+  stroke-width: 1.25;
+  transition:
+    stroke var(--dur-fast) var(--ease-out),
+    stroke-width var(--dur-fast) var(--ease-out);
+}
+
+.fill {
+  fill: var(--chart-area);
+  pointer-events: none;
+}
+
+.core {
+  fill: var(--accent);
+  pointer-events: none;
+}
+
+.inner {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+/* Active projects and the concept: bright rim and a soft glow. */
+.node[data-kind="project"] .shape,
+.node[data-kind="concept"] .shape {
+  stroke: var(--accent);
+  filter: drop-shadow(var(--glow-accent));
+}
+
+.node[data-kind="area"] .shape {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  filter: drop-shadow(var(--glow-accent));
+}
+
+.node[data-kind="center"] .shape {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  filter: drop-shadow(var(--glow-accent));
+}
+
+.node[data-kind="center"] .fill {
+  fill: var(--accent-soft);
+}
+
+.centerRing {
+  fill: none;
+  stroke: var(--accent-line);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+  pointer-events: none;
+}
+
+.centerText {
+  fill: var(--text-strong);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.node[data-kind="other"] .shape {
+  fill: var(--bg-sunken);
+  stroke: var(--accent-line);
+  filter: none;
+}
+
+/* Idle: no activity in the last 7 days. Small (floor size), no glow, muted rim. */
+.node[data-idle] .shape {
+  fill: var(--bg-sunken);
+  stroke: var(--border-strong);
+  filter: none;
+}
+
+.node[data-idle] .fill {
+  display: none;
+}
+
+.node[data-idle] .core {
+  fill: var(--text-faint);
+}
+
+/* Not connected: dashed outline, nothing inside. */
+.node[data-off] .shape {
+  fill: var(--bg-sunken);
+  stroke: var(--text-faint);
+  stroke-dasharray: 3 3;
+  filter: none;
+}
+
+/* Hovered, focused or dragged. */
+.node[data-hot] .shape {
+  stroke: var(--accent-strong);
+  stroke-width: 2;
+}
+
+.node[data-off][data-hot] .shape {
+  stroke: var(--text-muted);
+}
+
+.focusRing {
+  fill: none;
+  stroke: var(--focus-ring);
+  stroke-width: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.node:focus-visible .focusRing {
+  opacity: 1;
+}
+
+/* ---- Halo: needs you. Ring plus a badge shape (diamond red, triangle amber). ---- */
+
+.halo,
+.haloGlow {
+  fill: none;
+  pointer-events: none;
+}
+
+.halo {
+  stroke-width: 1.5;
+}
+
+/* A slow, faint glow that breathes in and out twice to draw the eye, then rests at its starting
+   opacity (nothing loops). Off under reduced motion. */
+.haloGlow {
+  stroke-width: 6;
+  opacity: 0.35;
+  animation: halo-breathe 3.6s var(--ease-in-out) 2;
+}
+
+.node[data-halo="red"] .halo {
+  stroke: var(--danger);
+}
+
+.node[data-halo="red"] .haloGlow {
+  stroke: var(--danger-soft);
+  filter: drop-shadow(var(--glow-danger));
+}
+
+.node[data-halo="amber"] .halo {
+  stroke: var(--warn);
+}
+
+.node[data-halo="amber"] .haloGlow {
+  stroke: var(--warn-soft);
+  filter: drop-shadow(var(--glow-warn));
+}
+
+.badge {
+  stroke: var(--bg-sunken);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  pointer-events: none;
+}
+
+.node[data-halo="red"] .badge {
+  fill: var(--danger);
+}
+
+.node[data-halo="amber"] .badge {
+  fill: var(--warn);
+}
+
+/* One breath per iteration: starts and ends at the resting opacity, so the stop is seamless. */
+@keyframes halo-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* ---- Labels: fixed size at any zoom, with a dark outline so they read over links and rings ---- */
+
+.labels {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.labels[data-on] {
+  opacity: 1;
+}
+
+.label {
+  fill: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  stroke: var(--bg-sunken);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.label[data-kind="area"] {
+  fill: var(--text-strong);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+}
+
+.label[data-kind="other"] {
+  fill: var(--text-muted);
+}
+
+.label[data-idle] {
+  fill: var(--text-muted);
+}
+
+.label[data-off] {
+  fill: var(--text-faint);
+}
+
+.label[data-hot] {
+  fill: var(--accent-strong);
+}
+
+.label[data-dim] {
+  opacity: 0.22;
+}
+
+/* ---- Overlays: controls, note, tooltip, legend ---- */
+
+.controls {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 2;
+  display: flex;
+  gap: var(--space-1-5);
+}
+
+.note {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  max-width: min(46ch, calc(100% - 200px));
+  padding: var(--space-1-5) var(--space-3);
+  border-left: 2px dashed var(--border-strong);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  pointer-events: none;
+}
+
+.tip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  display: grid;
+  gap: var(--space-1);
+  width: max-content;
+  max-width: min(280px, calc(100% - 16px));
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-raised);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  animation: tip-in var(--dur-fast) var(--ease-out) both;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.tipKind {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.tipTitle {
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  overflow-wrap: anywhere;
+}
+
+.tipFacts,
+.tipAlerts {
+  display: grid;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+}
+
+.tipAlerts {
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--divider);
+}
+
+.tipAlerts li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.tipAlerts li > span:first-child {
+  margin-top: 3px;
+}
+
+.tipMore {
+  color: var(--text-muted);
+}
+
+.tipHint {
+  margin-top: var(--space-1);
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+/* The legend floats in the stage's bottom-left corner on wide screens and sits below it on phones. */
+.legend {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 1;
+  width: max-content;
+  max-width: 300px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-backdrop);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  pointer-events: none;
+}
+
+.legendTitle {
+  margin-bottom: var(--space-1-5);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.legendList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendList li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.legendList strong {
+  margin-right: var(--space-1);
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+}
+
+.legendIcon {
+  flex: none;
+  width: 28px;
+  height: 18px;
+  overflow: visible;
+}
+
+.legendHint {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.hintCoarse {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .hintFine {
+    display: none;
+  }
+
+  .hintCoarse {
+    display: inline;
+  }
+}
+
+@media (max-width: 639px) {
+  .stage {
+    height: min(68dvh, 520px);
+    min-height: 380px;
+  }
+
+  .legend {
+    position: static;
+    width: auto;
+    max-width: none;
+    background: var(--bg-sunken);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .note {
+    max-width: calc(100% - 24px);
+    top: auto;
+    bottom: var(--space-3);
+  }
+}
+
+/* ---- Loading ---- */
+
+.skeleton {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.skeletonReadout {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.skeletonCell {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.skeletonStage {
+  height: clamp(440px, calc(100dvh - 420px), 780px);
+}
+
+@media (max-width: 639px) {
+  .skeletonReadout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .skeletonStage {
+    height: min(68dvh, 520px);
+    min-height: 380px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .haloGlow {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .nodes .node,
+  .tip {
+    animation: none;
+  }
+}

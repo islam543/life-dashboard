@@ -1,0 +1,72 @@
+/* Inline-editable text. Tokens only. */
+
+.view {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.view > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-style: normal;
+}
+
+.pencil {
+  flex: none;
+  color: var(--text-muted);
+  opacity: 0.7;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.view:hover .pencil,
+.pencil:focus-visible {
+  opacity: 1;
+}
+
+/* Dense rows: the pencil appears on hover or focus, and is always there for touch. */
+.quiet .pencil {
+  opacity: 0;
+}
+
+.quiet:hover .pencil,
+.quiet:focus-within .pencil {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .quiet .pencil {
+    opacity: 0.7;
+  }
+}
+
+.editing {
+  display: inline-grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 0;
+}
+
+.block {
+  display: grid;
+}
+
+.field {
+  font: inherit;
+}
+
+.editing[data-multiline] .field {
+  font-size: var(--fs-base);
+}
+
+.help {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}

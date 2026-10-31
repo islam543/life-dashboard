@@ -1,0 +1,178 @@
+/* Calendar and email detail: agenda beside the email list; one column on phones. */
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--grid-gap);
+  align-items: start;
+  min-width: 0;
+}
+
+.emailFirst {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+
+.calendarCell,
+.emailCell {
+  min-width: 0;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.quiet {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Not-connected steps, inside the panel's hint line. */
+.connectSteps {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.connectStep {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text);
+}
+
+.stepNum {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--accent-line);
+  border-radius: 50%;
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+/* ----------------------------------------------------------------- agenda */
+
+.agenda {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.day {
+  min-width: 0;
+}
+
+.dayHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-1-5);
+  border-bottom: 1px solid var(--divider);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+
+.dayCount {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
+
+.events {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 76px 20px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.event:hover {
+  background: var(--bg-hover);
+}
+
+/* The rail that ties a day's events together. */
+.event:not(:last-child) .rail::after {
+  content: "";
+  position: absolute;
+  top: calc(50% + 8px);
+  left: 50%;
+  width: 1px;
+  height: calc(100% - 4px);
+  background: var(--border);
+}
+
+.rail {
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+}
+
+.time {
+  display: grid;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.duration {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.eventMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.eventTitle {
+  color: var(--text-strong);
+}
+
+.live {
+  background: var(--accent-soft);
+}
+
+.nowTag {
+  flex: none;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.past .time,
+.past .eventTitle {
+  color: var(--text-muted);
+}
+
+.from {
+  color: var(--text-strong);
+}
+
+@media (max-width: 960px) {
+  .grid,
+  .emailFirst {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

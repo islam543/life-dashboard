@@ -1,0 +1,303 @@
+/* Needs you: urgency cards. Red and amber appear only here as urgency, always with a glyph and a word. */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 248px), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  --card: var(--warn);
+  --card-soft: var(--warn-soft);
+  --card-line: var(--warn-line);
+  --card-glow: var(--glow-warn);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) + 2px);
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-md);
+  background: linear-gradient(100deg, var(--card-soft) 0%, transparent 46%), var(--bg-sunken);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.red {
+  --card: var(--danger);
+  --card-soft: var(--danger-soft);
+  --card-line: var(--danger-line);
+  --card-glow: var(--glow-danger);
+}
+
+/* The urgency edge: a short bright bar on the left, like an instrument warning light. */
+.card::before {
+  content: "";
+  position: absolute;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  left: 0;
+  width: 2px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  background: var(--card);
+  box-shadow: var(--card-glow);
+}
+
+.card:hover {
+  border-color: var(--card-line);
+  transform: translateY(-1px);
+}
+
+.card:active {
+  transform: scale(0.99);
+}
+
+/* The whole card is the link's hit area; the focus ring goes on the card. */
+.card:has(.cardLink:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* New since the last visit: one soft flare, then still. The "New" tag stays as the lasting cue. */
+.fresh {
+  animation: flare 1.2s var(--ease-out) 240ms 1 both;
+}
+
+@keyframes flare {
+  0% {
+    box-shadow: 0 0 0 0 var(--card-line);
+  }
+  30% {
+    box-shadow: 0 0 0 3px var(--card-soft), var(--card-glow);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 18px;
+}
+
+.urgency {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--card);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.newTag {
+  padding: 1px var(--space-1-5);
+  border: var(--hairline) solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+}
+
+.area {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  text-wrap: pretty;
+}
+
+.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.cardLink {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Stretch the link over the card so the whole card opens the source. */
+.cardLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+}
+
+.cardLink:focus-visible {
+  outline: none;
+}
+
+.cardLink:hover {
+  color: var(--text-strong);
+}
+
+.extIcon {
+  flex: none;
+  margin-top: 4px;
+  color: var(--text-faint);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.card:hover .extIcon,
+.card:has(.cardLink:focus-visible) .extIcon {
+  color: var(--accent);
+  transform: translate(1px, -1px);
+}
+
+.detail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.due {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-1);
+}
+
+.dueText {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.overdue {
+  color: var(--card);
+}
+
+/* Time left of a 72 h countdown: a thin fuse that is shorter the closer the deadline. */
+.fuse {
+  position: relative;
+  flex: 1;
+  min-width: 40px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.fuseFill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--card);
+  transform-origin: left center;
+  opacity: 0.85;
+}
+
+/* Header meta: urgency counts as glyph plus number. */
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.metaCount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-strong);
+}
+
+.metaNew {
+  color: var(--accent);
+}
+
+/* "+N more not shown": a count, not a control, so it reads as quiet text. */
+.more {
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.more .num {
+  color: var(--text-strong);
+}
+
+/* All-clear: the message, then a runway that draws in once. */
+.clear {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* Drawn left to right once by unclipping the whole runway. Fades out toward the far end. */
+.runway {
+  width: 100%;
+  height: 14px;
+  mask-image: linear-gradient(90deg, black 0%, black 55%, transparent 100%);
+  clip-path: inset(0 100% 0 0);
+  animation: runway var(--dur-draw) var(--ease-out) 160ms 1 forwards;
+}
+
+.runwayEdge {
+  stroke: var(--accent-line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.runwayCenter {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 10 12;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.5;
+}
+
+@keyframes runway {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .card:active {
+    transform: none;
+  }
+
+  .runway {
+    clip-path: none;
+  }
+}

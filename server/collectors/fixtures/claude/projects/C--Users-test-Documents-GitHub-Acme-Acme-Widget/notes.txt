@@ -1,0 +1,2 @@
+{"type":"user","uuid":"n-1","timestamp":"2026-10-24T11:30:00.000Z"}
+{"type":"user","uuid":"n-2","timestamp":"2026-10-24T11:40:00.000Z"}

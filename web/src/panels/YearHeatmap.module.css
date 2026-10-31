@@ -1,0 +1,292 @@
+.root {
+  container: heat / inline-size;
+  min-width: 0;
+}
+
+/* Wide: grid left, stats right. Narrow: stats under the grid. */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.chart {
+  position: relative;
+  min-width: 0;
+}
+
+.gridRow {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.days {
+  flex: none;
+}
+
+/* Scrolls on its own when 52 weeks do not fit (phones). The page itself never scrolls sideways. */
+.scroller {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 3px 3px var(--space-2);
+  margin: -3px -3px 0;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+/* Only a relay for focus coming back from the detail view; the cell then shows the ring. */
+.scroller:focus {
+  outline: none;
+}
+
+.grid {
+  overflow: visible;
+}
+
+.axisText {
+  fill: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Cells ---------- */
+
+.cell {
+  stroke-width: 1;
+  transition:
+    fill var(--dur-base) var(--ease-out),
+    stroke var(--dur-fast) var(--ease-out);
+  cursor: default;
+}
+
+/* The custom ring (.ring) replaces the default outline on cells. */
+.cell:focus,
+.cell:focus-visible {
+  outline: none;
+}
+
+/* No data: a hollow outline, quieter than any filled day, so zero and "nothing recorded" never look alike. */
+.bNone {
+  fill: var(--seq-none);
+  stroke: var(--border);
+}
+
+.b0 {
+  fill: var(--seq-0);
+  stroke: var(--divider);
+}
+
+.b1 {
+  fill: var(--seq-1);
+  stroke: transparent;
+}
+
+.b2 {
+  fill: var(--seq-2);
+  stroke: transparent;
+}
+
+.b3 {
+  fill: var(--seq-3);
+  stroke: transparent;
+}
+
+.b4 {
+  fill: var(--seq-4);
+  stroke: var(--accent-strong);
+}
+
+.today {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.hover {
+  stroke: var(--text-strong);
+  stroke-width: 1.5;
+}
+
+.ring {
+  fill: none;
+  stroke: var(--focus-ring);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* Load-time reveal: a sweep from the oldest week to today. Only added when motion is allowed. */
+.reveal .cell {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cell-in var(--dur-slow) var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Today's square rings once after the sweep lands, then stays still. */
+.pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: today-pulse 900ms var(--ease-out) 620ms 1 both;
+}
+
+@keyframes today-pulse {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* ---------- Legend ---------- */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-2);
+  padding-left: 30px; /* lines up with the grid, past the weekday labels */
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.scale {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.swatchNone {
+  border: var(--hairline) solid var(--border-strong); /* a touch stronger than the cells so the small key stays legible */
+  background: var(--seq-none);
+}
+
+.swatch0 {
+  border: var(--hairline) solid var(--divider);
+  background: var(--seq-0);
+}
+
+.swatch1 {
+  background: var(--seq-1);
+}
+
+.swatch2 {
+  background: var(--seq-2);
+}
+
+.swatch3 {
+  background: var(--seq-3);
+}
+
+.swatch4 {
+  background: var(--seq-4);
+  box-shadow: var(--glow-accent);
+}
+
+.note {
+  color: var(--text-faint);
+}
+
+/* ---------- Stats ---------- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-5);
+  margin: 0;
+  min-width: 0;
+}
+
+@container heat (min-width: 560px) and (max-width: 859px) {
+  .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.stat {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.statLabel {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.statValue {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+  overflow-wrap: anywhere;
+}
+
+.statNone {
+  color: var(--text-faint);
+  font-size: var(--fs-md);
+}
+
+.statSub {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+/* Wide panel: grid left, stats in a column on the right. Last, so it wins over the base rules. */
+@container heat (min-width: 860px) {
+  .layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-8);
+  }
+
+  .chart {
+    flex: 1 1 0;
+  }
+
+  .stats {
+    flex: 0 0 300px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-left: var(--space-6);
+    border-left: var(--hairline) solid var(--divider);
+  }
+}

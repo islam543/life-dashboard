@@ -1,0 +1,58 @@
+/* Per-project 30-day time chart. Tokens only. */
+
+.host {
+  position: relative;
+  min-width: 0;
+}
+
+.stage {
+  width: 100%;
+}
+
+.stage svg {
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.bar {
+  fill: var(--accent);
+  fill-opacity: 0.55;
+}
+
+.barToday {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 4px var(--accent-line));
+}
+
+g[data-hover] .bar {
+  fill-opacity: 0.9;
+}
+
+.zero {
+  fill: var(--chart-grid);
+}
+
+.commit {
+  fill: var(--cat-2);
+}
+
+.hoverBand {
+  fill: var(--accent-soft);
+  pointer-events: none;
+}
+
+.label {
+  fill: var(--chart-axis);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}

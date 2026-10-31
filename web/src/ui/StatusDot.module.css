@@ -1,0 +1,88 @@
+.dot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
+.dot svg {
+  overflow: visible;
+}
+
+.fill {
+  fill: currentColor;
+}
+
+.ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.ok {
+  color: var(--accent);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.ai {
+  color: var(--ai);
+}
+
+.off,
+.idle {
+  color: var(--text-muted);
+}
+
+.glow.ok svg {
+  filter: drop-shadow(0 0 3px var(--accent-line));
+}
+
+.glow.warn svg {
+  filter: drop-shadow(0 0 3px var(--warn-line));
+}
+
+.glow.danger svg {
+  filter: drop-shadow(0 0 3px var(--danger-line));
+}
+
+.glow.ai svg {
+  filter: drop-shadow(0 0 3px var(--ai-line));
+}
+
+/* One ring that expands and fades. Runs once. */
+.pulse::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0;
+  animation: ping 900ms var(--ease-out) 200ms 1 both;
+  pointer-events: none;
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse::after {
+    animation: none;
+  }
+}

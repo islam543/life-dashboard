@@ -1,0 +1,100 @@
+/* Confirm dialog (delete note, leave with unsaved changes). Tokens only. */
+
+.dialog {
+  width: min(460px, calc(100vw - 2 * var(--space-4)));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-surface) 100%);
+  color: var(--text);
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .dialog[open] {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+:global(html):has(.dialog[open]) {
+  overflow: hidden;
+}
+
+.inner {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+}
+
+.inner[data-tone="danger"] {
+  border-top: 2px solid var(--danger-line);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+}
+
+.body code {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.error {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.danger {
+  background: var(--danger);
+  color: var(--on-accent);
+  box-shadow: var(--glow-danger);
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(1.08);
+}

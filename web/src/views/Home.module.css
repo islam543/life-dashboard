@@ -1,0 +1,92 @@
+/* Home grid. Phone first: one column in reading order. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "needs"
+    "moves"
+    "kpis"
+    "week"
+    "bars"
+    "heat";
+  gap: var(--grid-gap);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  animation: cell-in var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+
+.cell > * {
+  flex: 1;
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.needs {
+  grid-area: needs;
+}
+
+.moves {
+  grid-area: moves;
+}
+
+.kpis {
+  grid-area: kpis;
+}
+
+.week {
+  grid-area: week;
+}
+
+.bars {
+  grid-area: bars;
+}
+
+.heat {
+  grid-area: heat;
+}
+
+/* Tablet and small laptop: Next moves spans two rows beside the numbers and the project bars. */
+@media (min-width: 840px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "needs needs"
+      "moves kpis"
+      "moves bars"
+      "week  week"
+      "heat  heat";
+  }
+
+  /* The key numbers keep their own height instead of stretching to the Next moves list beside
+     them (which grows with every move and reason), so tiles never balloon into empty boxes. */
+  .kpis {
+    align-self: start;
+  }
+}
+
+/* Desktop: 12 columns. Most important top-left; Next moves spans the key numbers and project bars. */
+@media (min-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "needs needs needs needs needs needs needs needs needs needs needs needs"
+      "moves moves moves moves moves kpis  kpis  kpis  kpis  kpis  kpis  kpis"
+      "moves moves moves moves moves bars  bars  bars  bars  bars  bars  bars"
+      "week  week  week  week  week  week  week  week  week  week  week  week"
+      "heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat";
+  }
+}

@@ -1,0 +1,437 @@
+/* Key numbers: bare numbers first, a 14-day picture underneath. */
+
+.body {
+  container-type: inline-size;
+}
+
+.grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(min-content, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@container (min-width: 520px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1040px) {
+  .grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.item {
+  display: flex;
+  min-width: 0;
+}
+
+.tile {
+  container-type: inline-size;
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--bg-surface-top), var(--bg-sunken));
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.tile:hover {
+  border-color: var(--accent-line);
+  box-shadow: inset 0 0 24px 0 var(--accent-soft);
+}
+
+.tile:active {
+  transform: scale(0.98);
+}
+
+.tile:has(.hit:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Not connected, never collected, failed: dimmer border, no glow. */
+.quiet {
+  border-style: dashed;
+  border-color: var(--border);
+  background: var(--bg-sunken);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  min-height: 18px;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  line-height: var(--lh-snug);
+}
+
+/* The label is the button; its hit area covers the whole tile. */
+.hit {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+}
+
+.hit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--radius-md);
+}
+
+.hit:focus-visible {
+  outline: none;
+}
+
+.tile:hover .label {
+  color: var(--text);
+}
+
+.expand {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.tile:hover .expand,
+.tile:has(.hit:focus-visible) .expand {
+  opacity: 1;
+  color: var(--accent);
+  transform: translate(1px, -1px);
+}
+
+.caveat {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  margin-top: 1px;
+}
+
+.value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  color: var(--text-strong);
+  line-height: var(--lh-tight);
+}
+
+.number {
+  font-size: clamp(var(--fs-2xl), 17cqi, var(--fs-3xl));
+  font-weight: var(--fw-medium);
+}
+
+.unit {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.noValue {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+}
+
+.compare {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.compare > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arrow {
+  flex: none;
+  margin-top: 0.3em;
+  color: var(--accent);
+}
+
+.flags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+}
+
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text);
+}
+
+/* Pictures sit on a shared bottom line across a row; trend charts grow upward into spare height. */
+.visual {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+  padding-top: var(--space-2);
+}
+
+/* Sparkline with the period the number covers shaded behind it. Absolutely placed so a tall chart
+   never makes the tile (and the row) taller than its other content needs. */
+.spark {
+  position: relative;
+  flex: 1;
+  min-height: 36px;
+}
+
+.sparkInner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.band {
+  position: absolute;
+  top: -2px;
+  bottom: 0;
+  /* Sparkline draws between 4px insets (its PAD); --at is the shaded stretch's start, 0 to 1. */
+  left: calc(var(--space-1) + (100% - var(--space-2)) * var(--at, 0));
+  right: 0;
+  border-left: var(--hairline) dashed var(--accent-line);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: linear-gradient(180deg, var(--accent-soft), transparent 90%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Bars: Jira split and long streaks. */
+.picture {
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.track {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.segActive,
+.segTodo {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+}
+
+.segActive {
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+.segTodo {
+  background: var(--seq-2);
+}
+
+.segBest {
+  background: var(--accent-strong);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.keyActive {
+  background: var(--accent);
+}
+
+.keyTodo {
+  background: var(--seq-2);
+}
+
+/* PR age strip: 14 days ago on the left, now on the right; ticks at 3 days and 1 day. */
+.ages {
+  position: relative;
+  height: 36px;
+}
+
+.agesAxis {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 1px;
+  background: var(--chart-grid);
+}
+
+.agesTick {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 0;
+  border-left: var(--hairline) dashed var(--chart-grid);
+}
+
+.ageDot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-line);
+}
+
+.ok {
+  background: var(--accent);
+}
+
+.warn {
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn-line);
+}
+
+.danger {
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger-line);
+}
+
+.scale,
+.agesScale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+
+.agesScale {
+  position: relative;
+}
+
+/* Sits under its tick, not at the midpoint. */
+.agesMark {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+/* Streak cells: one per day up to the best. */
+.cells {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+}
+
+.cell {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--divider);
+  transform-origin: bottom center;
+}
+
+.cellOn {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-line);
+}
+
+.cellBest {
+  background: var(--accent-strong);
+}
+
+/* Problem states inside a tile. */
+.problem {
+  display: grid;
+  gap: var(--space-1-5);
+  margin-top: var(--space-2);
+  min-width: 0;
+}
+
+.problemTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+}
+
+/* The exact step to fix the source; long enough to read in full, clamped only for runaway messages. */
+.problemText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile:active {
+    transform: none;
+  }
+}

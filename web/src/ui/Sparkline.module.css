@@ -1,0 +1,65 @@
+.spark {
+  --spark: var(--chart-line);
+  --spark-line: var(--accent-line);
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.spark svg {
+  overflow: visible;
+}
+
+.ai {
+  --spark: var(--ai);
+  --spark-line: var(--ai-line);
+}
+
+.warn {
+  --spark: var(--warn);
+  --spark-line: var(--warn-line);
+}
+
+.danger {
+  --spark: var(--danger);
+  --spark-line: var(--danger-line);
+}
+
+.line {
+  fill: none;
+  stroke: var(--spark);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px var(--spark-line));
+}
+
+.areaTop {
+  stop-color: var(--spark);
+  stop-opacity: 0.22;
+}
+
+.areaBottom {
+  stop-color: var(--spark);
+  stop-opacity: 0;
+}
+
+.baseline {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.dot {
+  fill: var(--spark);
+  stroke: var(--bg-surface);
+  stroke-width: 1.5;
+}
+
+.ring {
+  fill: none;
+  stroke: var(--spark);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+}

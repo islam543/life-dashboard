@@ -1,0 +1,423 @@
+/* Learning detail: cycle stepper and streak side by side, agenda below. One column on phones. */
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-areas:
+    "cycle streak"
+    "agenda agenda";
+  gap: var(--grid-gap);
+  min-width: 0;
+}
+
+.cycleCell,
+.streakCell,
+.agendaCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cycleCell > *,
+.streakCell > *,
+.agendaCell > * {
+  flex: 1;
+}
+
+.cycleCell {
+  grid-area: cycle;
+}
+
+.streakCell {
+  grid-area: streak;
+}
+
+.agendaCell {
+  grid-area: agenda;
+}
+
+/* ------------------------------------------------------------------ cycle */
+
+.cycle {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.kicker {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.concept {
+  margin-top: var(--space-1);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.stepper {
+  min-width: 0;
+  padding-top: var(--space-1);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(var(--steps), minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-1);
+  text-align: center;
+}
+
+/* Connector to the next step: a faint rail, filled in after a done step. */
+.step:not(:last-child)::after,
+.done:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: calc(50% + 22px);
+  width: calc(100% - 44px);
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+
+.done:not(:last-child)::before {
+  z-index: 1;
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+  transform-origin: left center;
+  animation: rail-fill var(--dur-slow) var(--ease-out) both;
+  animation-delay: calc(200ms + var(--i, 0) * 90ms);
+}
+
+@keyframes rail-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+}
+
+.nodeNum {
+  font-size: var(--fs-sm);
+}
+
+.done .node {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--glow-accent);
+}
+
+.current .node {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.nodeRing {
+  position: absolute;
+  inset: -2px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.stepLabel {
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.done .stepLabel {
+  color: var(--text);
+}
+
+.current .stepLabel {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+}
+
+/* ----------------------------------------------------------------- streak */
+
+.streak {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.streakHero {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+
+.streakNum {
+  color: var(--text-strong);
+  font-size: var(--fs-3xl);
+  line-height: 1;
+  text-shadow: 0 0 24px var(--accent-line);
+}
+
+.streakUnit {
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+}
+
+.bullet {
+  position: relative;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--seq-0);
+}
+
+.bulletFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--seq-3), var(--accent));
+  box-shadow: var(--glow-accent);
+}
+
+.bulletBestFill {
+  background: linear-gradient(90deg, var(--seq-3), var(--accent-strong));
+}
+
+.bulletBest {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text-strong);
+}
+
+.streakFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.streakFacts dt {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.streakFacts dd {
+  margin: var(--space-1) 0 0;
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+
+.streakHint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Provenance: the count is what Daily.md says, not a live check. */
+.streakSource {
+  padding-top: var(--space-3);
+  border-top: var(--hairline) solid var(--divider);
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
+}
+
+/* ----------------------------------------------------------------- agenda */
+
+.agenda {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.agendaHead {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 520px;
+}
+
+.agendaCount {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.agendaNum {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+}
+
+.progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--seq-0);
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+.checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 0 var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--divider);
+}
+
+.box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  color: var(--on-accent);
+}
+
+.checkDone .box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.checkText {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.checkDone .checkText {
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "cycle"
+      "streak"
+      "agenda";
+  }
+}
+
+/* Phones: the stepper turns vertical, label beside the node. */
+@media (max-width: 640px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .step {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: 0;
+    text-align: left;
+  }
+
+  .stepLabel {
+    padding-top: 6px;
+  }
+
+  .step:not(:last-child)::after,
+  .done:not(:last-child)::before {
+    top: 38px;
+    left: 15px;
+    width: 2px;
+    height: calc(100% - 44px + var(--space-3));
+  }
+
+  .done:not(:last-child)::before {
+    transform-origin: center top;
+    animation-name: rail-fill-v;
+  }
+
+  .concept {
+    font-size: var(--fs-xl);
+  }
+}
+
+@keyframes rail-fill-v {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}

@@ -1,0 +1,358 @@
+/* Task list. Tokens only. */
+
+.wrap {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.summaryText {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+/* ---------- Add ---------- */
+
+.add {
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.addLabel {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.add:focus-within .addLabel {
+  color: var(--accent);
+}
+
+.addRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  gap: var(--space-2);
+}
+
+.addText {
+  min-width: 0;
+}
+
+.addDue {
+  min-width: 0;
+}
+
+.addButton {
+  min-height: 36px;
+}
+
+/* ---------- List ---------- */
+
+.list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list[hidden] {
+  display: none;
+}
+
+.item {
+  border-top: var(--hairline) solid var(--divider);
+}
+
+.item:first-child {
+  border-top: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-1-5) 0;
+}
+
+.row[data-pending] {
+  opacity: 0.6;
+}
+
+/* Checkbox: a real input over a drawn box; the check draws itself when ticked. */
+.check {
+  position: relative;
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+}
+
+.check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.check input:disabled {
+  cursor: default;
+}
+
+.check svg {
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.box {
+  fill: transparent;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  transition:
+    fill var(--dur-base) var(--ease-out),
+    stroke var(--dur-fast) var(--ease-out);
+}
+
+.check:hover .box {
+  stroke: var(--accent);
+}
+
+.check input:focus-visible + svg {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.tick {
+  fill: none;
+  stroke: var(--on-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-out) 60ms;
+}
+
+.check input:checked + svg .box {
+  fill: var(--accent);
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 4px var(--accent-line));
+}
+
+.check input:checked + svg .tick {
+  stroke-dashoffset: 0;
+}
+
+.check input:active + svg {
+  transform: scale(0.92);
+}
+
+.text {
+  min-width: 0;
+  padding-top: var(--space-1-5);
+}
+
+/* The strike-through fades in on every line of the text when the task is done. */
+.textValue {
+  color: var(--text-strong);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  text-decoration-line: line-through;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  transition:
+    text-decoration-color var(--dur-slow) var(--ease-out),
+    color var(--dur-slow) var(--ease-out);
+}
+
+.row[data-done] .textValue {
+  color: var(--text-muted);
+  text-decoration-color: var(--text-muted);
+}
+
+.due {
+  display: inline-grid;
+  justify-items: end;
+  gap: var(--space-0-5);
+}
+
+.dueButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-2);
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.dueButton:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.dueEmpty {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.row:hover .dueEmpty,
+.dueButton:focus-visible .dueEmpty {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .dueEmpty {
+    opacity: 1;
+  }
+}
+
+.dueEdit {
+  display: inline-flex;
+}
+
+.dueInput {
+  width: 150px;
+  min-height: var(--target-min);
+}
+
+.dueError {
+  max-width: 180px;
+  color: var(--danger);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+
+.delete {
+  color: var(--text-muted);
+}
+
+.delete:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.more {
+  justify-self: start;
+}
+
+/* ---------- Done ---------- */
+
+.done {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: var(--hairline) dashed var(--border-strong);
+}
+
+.doneToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.doneToggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.count {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.chevron[data-open] {
+  transform: none;
+}
+
+.chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Narrow ---------- */
+
+@media (max-width: 560px) {
+  .addRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .addText {
+    grid-column: 1 / -1;
+  }
+
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "check text delete"
+      ".     due  .";
+  }
+
+  .check {
+    grid-area: check;
+  }
+
+  .text {
+    grid-area: text;
+  }
+
+  .due {
+    grid-area: due;
+    justify-items: start;
+    margin-top: calc(-1 * var(--space-2));
+  }
+
+  .delete {
+    grid-area: delete;
+  }
+
+  .dueButton {
+    margin-left: calc(-1 * var(--space-2));
+  }
+
+  .dueEmpty {
+    opacity: 1;
+  }
+}

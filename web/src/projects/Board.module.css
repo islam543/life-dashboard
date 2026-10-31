@@ -1,0 +1,412 @@
+/* Projects board. Tokens only. */
+
+.body {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* ---------- Readout ---------- */
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.cell {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: var(--hairline) solid var(--divider);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.cell dt {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.cell dd {
+  margin: 0;
+}
+
+.value {
+  color: var(--text-strong);
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
+}
+
+.sub {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.cell[data-tone="warn"] .value {
+  color: var(--warn);
+}
+
+.cell[data-tone="danger"] .value,
+.cell[data-tone="danger"] .sub {
+  color: var(--danger);
+}
+
+/* ---------- Toolbar ---------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.toolbarLabel {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* ---------- Status groups ---------- */
+
+.group {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.groupEmpty {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--hairline) solid var(--divider);
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+
+.group[data-status="done"] .groupTitle {
+  color: var(--text);
+}
+
+.groupCount {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.groupToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.groupToggle:hover {
+  background: var(--bg-hover);
+}
+
+.chevron {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.chevron[data-open] {
+  transform: none;
+}
+
+.chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.groupNone {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cardItem {
+  display: flex;
+  min-width: 0;
+}
+
+/* ---------- Card ---------- */
+
+.card {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--bg-surface-top), var(--bg-sunken));
+  box-shadow: var(--shadow-panel);
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+/* HUD tick on the top-left corner, lit on hover. */
+.card::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 16px;
+  height: 16px;
+  border-top: 1px solid var(--accent-line);
+  border-left: 1px solid var(--accent-line);
+  border-top-left-radius: var(--radius-md);
+  pointer-events: none;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-panel), 0 0 0 1px var(--accent-soft), 0 8px 28px -14px var(--accent-line);
+  color: var(--text);
+}
+
+.card:hover::before {
+  border-color: var(--accent);
+}
+
+.card:active {
+  transform: scale(0.99);
+}
+
+.card:focus-visible {
+  outline-offset: 3px;
+}
+
+.card[data-tone="danger"] {
+  border-color: var(--danger-line);
+}
+
+.card[data-tone="danger"]::before {
+  border-color: var(--danger);
+}
+
+.card[data-status="paused"],
+.card[data-status="idea"] {
+  background: var(--bg-sunken);
+}
+
+.card[data-status="done"] {
+  background: var(--bg-sunken);
+  box-shadow: none;
+}
+
+.card[data-status="done"] .cardName {
+  color: var(--text);
+}
+
+/* Pulses once after the project is created or when you come back to the board from it. */
+.card[data-highlight] {
+  animation: arrive 1.2s var(--ease-out) 1;
+}
+
+@keyframes arrive {
+  0% {
+    box-shadow: var(--shadow-panel), 0 0 0 0 var(--accent-line);
+    border-color: var(--accent);
+  }
+  40% {
+    box-shadow: var(--shadow-panel), 0 0 0 6px var(--accent-soft), var(--glow-accent);
+    border-color: var(--accent);
+  }
+  100% {
+    box-shadow: var(--shadow-panel), 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card[data-highlight] {
+    animation: none;
+    border-color: var(--accent);
+  }
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 22px;
+}
+
+.cardName {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.card:hover .cardName {
+  color: var(--accent-strong);
+}
+
+.cardDesc {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: calc(-1 * var(--space-1-5));
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.cardTasks {
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.cardTaskText {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.cardTime {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.cardHours {
+  display: grid;
+  gap: 0;
+}
+
+.cardHoursValue {
+  color: var(--text-strong);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+}
+
+.cardHoursLabel {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.cardSpark {
+  display: block;
+  min-width: 0;
+}
+
+/* No time in 14 days: a flat dashed baseline instead of an empty chart. */
+.cardFlat {
+  display: block;
+  height: 28px;
+  border-bottom: 1px dashed var(--chart-grid);
+  transform: translateY(-14px);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--divider);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  color: var(--text-strong);
+}
+
+/* An open checkbox, the same mark notes use for action items. */
+.actionsMark {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+}
+
+.lastNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.lastNote svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---------- Narrow ---------- */
+
+@media (max-width: 720px) {
+  .readout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .value {
+    font-size: var(--fs-xl);
+  }
+}

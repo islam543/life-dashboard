@@ -1,0 +1,70 @@
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-12);
+}
+
+.main {
+  margin-top: var(--space-5);
+  outline: none;
+}
+
+.skip {
+  position: absolute;
+  top: var(--space-2);
+  left: -9999px;
+  z-index: var(--z-tooltip);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+}
+
+.skip:focus {
+  left: var(--space-2);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  animation: banner-in var(--dur-base) var(--ease-out) both;
+}
+
+.banner[data-tone="warn"] {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+}
+
+.bannerText {
+  flex: 1 1 260px;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.bannerText strong {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

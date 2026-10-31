@@ -1,0 +1,23 @@
+/* #/projects layout: board and Untracked tray side by side, stacked on narrow screens. Tokens only. */
+
+.view {
+  min-width: 0;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  align-items: start;
+  gap: var(--grid-gap);
+}
+
+.boardMain,
+.tray {
+  min-width: 0;
+}
+
+@media (max-width: 1080px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

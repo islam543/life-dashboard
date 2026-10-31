@@ -1,0 +1,157 @@
+/*
+ * Design tokens: dark navy sci-fi control room.
+ * Components use these variables only, never raw hex values.
+ * Dark only by decision (PLAN.md section 8), so there is no light theme layer.
+ *
+ * Contrast (WCAG 2.2, checked against bg-app / bg-surface / bg-raised):
+ *   text-strong 17.8 / 16.9 / 15.3   text 12.6 / 12.0 / 10.8   text-muted 7.2 / 6.8 / 6.2
+ *   text-faint 5.7 / 5.4 / 4.9       accent 12.7 / 12.0 / 10.9  danger 7.7 / 7.3 / 6.6
+ *   warn 12.2 / 11.6 / 10.5          ai 9.2 / 8.7 / 7.9         focus-ring 15.1 / 14.3 / 13.0
+ *   on-accent on accent 12.3
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: higher means lighter. */
+  --bg-app: #060b1a;
+  --bg-sunken: #040815;
+  --bg-surface: #0a1226;
+  --bg-surface-top: #0d1732; /* top stop of the panel gradient */
+  --bg-raised: #111c38; /* overlay card, tooltips, dialogs */
+  --bg-hover: #152242;
+  --bg-backdrop: rgba(3, 6, 16, 0.72);
+
+  /* Text */
+  --text-strong: #eef4ff; /* numbers, headings */
+  --text: #c3d0e8; /* body */
+  --text-muted: #8e9dbc; /* labels, meta */
+  --text-faint: #7a8aab; /* hints; still 4.5:1 on every surface */
+
+  /* Data accent: cyan. The one accent for data, links and focus. */
+  --accent: #5ce1f5;
+  --accent-strong: #9aefff;
+  --accent-soft: rgba(92, 225, 245, 0.12);
+  --accent-line: rgba(92, 225, 245, 0.38);
+  --on-accent: #04101f;
+
+  /* Urgency only. Never decorative. Always paired with a shape or text. */
+  --danger: #ff7a66; /* vermilion red: act today */
+  --danger-soft: rgba(255, 122, 102, 0.12);
+  --danger-line: rgba(255, 122, 102, 0.42);
+  --warn: #ffc15e; /* amber: this week, stale data */
+  --warn-soft: rgba(255, 193, 94, 0.12);
+  --warn-line: rgba(255, 193, 94, 0.4);
+
+  /* AI content (Next moves). */
+  --ai: #b4a6ff;
+  --ai-soft: rgba(180, 166, 255, 0.12);
+  --ai-line: rgba(180, 166, 255, 0.4);
+
+  /* Hairlines and focus */
+  --border: rgba(125, 211, 252, 0.12);
+  --border-strong: rgba(125, 211, 252, 0.24);
+  --divider: rgba(125, 211, 252, 0.08);
+  --focus-ring: #9aefff;
+  --grid-line: rgba(125, 211, 252, 0.05);
+  --ambient-top: rgba(92, 225, 245, 0.07); /* page glow, top centre */
+  --ambient-corner: rgba(76, 141, 255, 0.05); /* page glow, bottom right */
+  --selection: rgba(92, 225, 245, 0.28);
+
+  /* Glow and depth */
+  --shadow-panel: inset 0 1px 0 0 rgba(190, 235, 255, 0.05), inset 0 0 40px 0 rgba(92, 225, 245, 0.02),
+    0 16px 40px -24px rgba(0, 0, 0, 0.85);
+  --shadow-raised: inset 0 1px 0 0 rgba(190, 235, 255, 0.07), 0 24px 64px -16px rgba(0, 0, 0, 0.8);
+  --glow-accent: 0 0 14px rgba(92, 225, 245, 0.4);
+  --glow-danger: 0 0 14px rgba(255, 122, 102, 0.42);
+  --glow-warn: 0 0 14px rgba(255, 193, 94, 0.36);
+  --glow-ai: 0 0 14px rgba(180, 166, 255, 0.4);
+
+  /* Charts */
+  --chart-line: var(--accent);
+  --chart-area: rgba(92, 225, 245, 0.2);
+  --chart-grid: rgba(125, 211, 252, 0.08);
+  --chart-axis: var(--text-muted);
+  /* Sequential cyan scale for heatmaps: zero, then 4 steps. "none" = no data, distinct from zero. */
+  --seq-none: transparent;
+  --seq-0: #0f1b33;
+  --seq-1: #0f3a52;
+  --seq-2: #146279;
+  --seq-3: #1e93a8;
+  --seq-4: #5ce1f5;
+  /* Categorical series (stacked charts). No red, amber or violet: those carry meaning. Label series directly. */
+  --cat-1: #5ce1f5;
+  --cat-2: #4c8dff;
+  --cat-3: #45c4a8;
+  --cat-4: #9cc9ff;
+  --cat-5: #6e86b5;
+  --cat-6: #c9f3fa;
+
+  /* Skeleton */
+  --skeleton-base: rgba(125, 211, 252, 0.06);
+  --skeleton-shine: rgba(125, 211, 252, 0.12);
+
+  /* Type */
+  --font-ui: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --fs-xs: 11px; /* letter-spaced labels */
+  --fs-sm: 12.5px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 40px; /* KPI numbers */
+  --lh-tight: 1.15;
+  --lh-snug: 1.3;
+  --lh-base: 1.5;
+  --tracking-label: 0.12em;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* Spacing (4px base) */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Shape */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px; /* panels; keep in sync with PANEL_RADIUS in ui/Panel.tsx */
+  --radius-pill: 999px;
+  --hairline: 1px;
+  --target-min: 32px; /* smallest control height; WCAG 2.5.8 floor is 24px */
+
+  /* Layout */
+  --page-max: 1440px;
+  --gutter: clamp(16px, 3vw, 32px);
+  --panel-pad: clamp(14px, 1.6vw, 20px);
+  --grid-gap: clamp(12px, 1.4vw, 18px);
+
+  /* Layers */
+  --z-header: 10;
+  --z-banner: 15;
+  --z-overlay: 50;
+  --z-tooltip: 70;
+
+  /* Motion. Interactions stay at or under 300ms. Load-time reveals (count-up, chart draw-in) use --dur-draw.
+     JS animations read the same values from MOTION in hooks/useReducedMotion.ts. */
+  --dur-press: 140ms;
+  --dur-fast: 180ms;
+  --dur-base: 240ms;
+  --dur-slow: 300ms;
+  --dur-draw: 700ms;
+  --stagger: 40ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-in-out: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+}

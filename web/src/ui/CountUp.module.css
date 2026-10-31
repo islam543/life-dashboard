@@ -1,0 +1,36 @@
+.count {
+  display: inline-block;
+  position: relative;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.text {
+  display: inline-block;
+}
+
+/* One soft glow when the value changes. Runs once per change. */
+.flash {
+  animation: flash 1.1s var(--ease-out) 1;
+}
+
+@keyframes flash {
+  0% {
+    text-shadow: 0 0 0 transparent;
+    color: inherit;
+  }
+  18% {
+    text-shadow: var(--glow-accent);
+    color: var(--accent-strong);
+  }
+  100% {
+    text-shadow: 0 0 0 transparent;
+    color: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash {
+    animation: none;
+  }
+}

@@ -1,0 +1,294 @@
+/* ---------- Shared: segmented toggle ---------- */
+
+.segmented {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  padding: var(--space-0-5);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  isolation: isolate;
+}
+
+.thumb {
+  position: absolute;
+  top: var(--space-0-5);
+  bottom: var(--space-0-5);
+  left: 0;
+  z-index: -1;
+  border: var(--hairline) solid var(--accent-line);
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  box-shadow: var(--glow-accent);
+  pointer-events: none;
+}
+
+.thumbAnimated {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out);
+}
+
+.segment {
+  min-height: calc(var(--target-min) - 4px);
+  min-width: var(--target-min);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.segment:hover {
+  color: var(--text-strong);
+}
+
+.segment[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
+.segment:active {
+  transform: scale(0.98);
+}
+
+/* ---------- Shared: chart tooltip ---------- */
+
+.tip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  display: grid;
+  gap: var(--space-0-5);
+  width: max-content;
+  max-width: min(280px, 100%);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-left: 2px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-raised);
+  pointer-events: none;
+  animation: tip-in var(--dur-press) var(--ease-out) both;
+}
+
+.tipDanger {
+  border-left-color: var(--danger);
+}
+
+.tipWarn {
+  border-left-color: var(--warn);
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tipTitle {
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+.tipValue {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-snug);
+}
+
+.tipDanger .tipValue {
+  color: var(--danger);
+}
+
+.tipWarn .tipValue {
+  color: var(--warn);
+}
+
+.tipMeta {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Time by project ---------- */
+
+.host {
+  position: relative;
+  container: bars / inline-size;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 2.2ch minmax(0, 34%) minmax(0, 1fr) 8ch;
+  grid-template-areas: "rank label bar value";
+  align-items: center;
+  column-gap: var(--space-3);
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
+  border-radius: var(--radius-xs);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--accent-soft);
+}
+
+.rank {
+  grid-area: rank;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  grid-area: label;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row:hover .label {
+  color: var(--text-strong);
+}
+
+.count {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Other" is a sum of many projects, not one more project: set apart by a dashed rule and a
+   striped bar, and its bar is not on the same scale when it is longer than #1. */
+.other {
+  margin-top: var(--space-1);
+  border-top: var(--hairline) dashed var(--border-strong);
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
+  padding-top: var(--space-1);
+}
+
+.other .label {
+  color: var(--text-muted);
+}
+
+.other .rank {
+  color: var(--text-muted);
+}
+
+.track {
+  grid-area: bar;
+  min-width: 0;
+  height: 14px;
+}
+
+.track svg {
+  overflow: visible;
+}
+
+.value {
+  grid-area: value;
+  justify-self: end;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  text-align: right;
+}
+
+.other .value {
+  color: var(--text-muted);
+}
+
+.trackLine {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.barStart {
+  stop-color: var(--accent);
+  stop-opacity: 0.18;
+}
+
+.barEnd {
+  stop-color: var(--accent);
+  stop-opacity: 0.85;
+}
+
+/* Striped fill for the aggregate. */
+.otherFill {
+  fill: var(--cat-5);
+  fill-opacity: 0.22;
+}
+
+.otherStripe {
+  fill: var(--cat-4);
+  fill-opacity: 0.7;
+}
+
+.otherBar {
+  stroke: var(--cat-5);
+  stroke-width: 1;
+}
+
+/* Axis-break mark at the end of a bar that is longer than the scale. Drawn in the panel colour so it
+   cuts through the bar. */
+.barBreak line {
+  stroke: var(--bg-surface);
+  stroke-width: 2.5;
+  stroke-linecap: square;
+}
+
+.cap {
+  fill: var(--accent-strong);
+  filter: drop-shadow(0 0 4px var(--accent-line));
+}
+
+.otherCap {
+  fill: var(--cat-4);
+}
+
+.bar {
+  transition: filter var(--dur-fast) var(--ease-out);
+}
+
+.row:hover .bar {
+  filter: brightness(1.25);
+}
+
+/* Narrow panel: label and value on one line, the bar full width below. */
+@container bars (max-width: 380px) {
+  .row {
+    grid-template-columns: 2.2ch minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rank label value"
+      ".    bar   bar";
+    row-gap: var(--space-0-5);
+    padding-block: var(--space-1);
+  }
+}

@@ -1,0 +1,780 @@
+/* Daily check-in dialog. Tokens only (styles/tokens.css). */
+
+.dialog {
+  --ctl-h: var(--space-10);
+  --label-w: calc(var(--space-12) * 2);
+  --pad-x: var(--space-6);
+
+  width: min(540px, calc(100vw - 2 * var(--space-4)));
+  max-width: none;
+  max-height: calc(100dvh - 2 * var(--space-4));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse 70% 120px at 50% 0%, var(--accent-soft), transparent 100%),
+    linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-surface) 220px, var(--bg-surface) 100%);
+  color: var(--text);
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    border-color var(--dur-slow) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-out),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .dialog[open] {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.dialog::backdrop {
+  opacity: 0;
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.dialog[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* HUD corner ticks, same as panels. Decorative only. */
+.dialog::before,
+.dialog::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+  border-color: var(--accent-line);
+  border-style: solid;
+}
+
+.dialog::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+  border-top-left-radius: var(--radius-lg);
+}
+
+.dialog::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 1px 1px 0;
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+/* The saved moment: the frame lights up once. */
+.dialog:has(.done) {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-raised), var(--glow-accent);
+}
+
+/* The page behind a modal never scrolls. */
+:global(html):has(.dialog[open]) {
+  overflow: hidden;
+}
+
+/* Layout ---------------------------------------------------------------------------------------- */
+
+.form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--pad-x) var(--space-2);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-medium);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.close {
+  margin-right: calc(-1 * var(--space-2));
+  color: var(--text-muted);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-1) var(--pad-x) var(--space-3);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--pad-x) var(--space-4);
+  border-top: var(--hairline) solid var(--divider);
+  background: var(--bg-surface);
+}
+
+.keys {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.keys kbd:not(:first-child) {
+  margin-left: var(--space-2);
+}
+
+/* "Press Esc again to discard your answers": takes the place of the key hints after the first Escape. */
+.discard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+/* Empty: out of the layout but still in the accessibility tree, so the warning is announced. */
+.discard:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dialog kbd {
+  display: inline-block;
+  padding: 1px var(--space-1-5);
+  border: var(--hairline) solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text);
+}
+
+.save {
+  min-width: calc(var(--space-12) * 3);
+}
+
+/* Rows: label column on the left, control on the right, like instrument readouts. */
+
+.row {
+  display: grid;
+  grid-template-columns: var(--label-w) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  align-items: start;
+  padding: var(--space-3) 0;
+  border-top: var(--hairline) solid var(--divider);
+}
+
+.row:first-of-type {
+  border-top: 0;
+}
+
+.rowLabel {
+  display: flex;
+  align-items: center;
+  min-height: var(--ctl-h);
+}
+
+.labelBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.labelText {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.unit {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+/* The row you are in lights its label, so the eye keeps its place while tabbing. */
+.row:focus-within .labelText {
+  color: var(--accent);
+}
+
+.row[data-invalid] .labelText {
+  color: var(--danger);
+}
+
+.rowControl {
+  min-width: 0;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1-5);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  color: var(--danger);
+}
+
+/* Inputs ---------------------------------------------------------------------------------------- */
+
+.input {
+  width: 100%;
+  height: var(--ctl-h);
+  padding: 0 var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.input:hover {
+  border-color: var(--accent-line);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input:focus-visible {
+  outline-offset: 1px;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.dayControl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.dateInput {
+  width: auto;
+  min-width: calc(var(--space-12) * 3.25);
+  font-size: var(--fs-base);
+  cursor: text;
+}
+
+.dateInput::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.dateInput::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.dayNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.dayNote[data-saved] {
+  color: var(--text);
+}
+
+/* Sleep stepper: minus, value, plus as one instrument. */
+
+.stepper {
+  display: inline-grid;
+  grid-template-columns: var(--ctl-h) calc(var(--space-12) * 1.75) var(--ctl-h);
+  align-items: stretch;
+}
+
+.stepButton {
+  display: grid;
+  place-items: center;
+  height: var(--ctl-h);
+  padding: 0;
+  border: var(--hairline) solid var(--border-strong);
+  background: var(--bg-surface-top);
+  color: var(--text);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.stepButton:first-child {
+  border-right: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.stepButton:last-child {
+  border-left: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.stepButton:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+.stepButton:active {
+  background: var(--accent-soft);
+}
+
+.stepInput {
+  position: relative;
+  border-radius: 0;
+  text-align: center;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-medium);
+}
+
+.stepInput:focus {
+  z-index: 1;
+}
+
+/* Field with a unit inside the box (QAR, min). */
+
+.affix {
+  position: relative;
+  display: block;
+}
+
+.affix .input {
+  padding-right: calc(var(--space-12) + var(--space-1));
+}
+
+.suffix {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.spendField {
+  max-width: calc(var(--space-12) * 4);
+}
+
+.customField {
+  width: calc(var(--space-12) * 2.5);
+}
+
+.custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.customLabel {
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+/* Segmented radios: native inputs, one tab stop per group, arrows move. */
+
+.segments {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.segments[data-count="6"] {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.segment {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-0-5);
+  min-width: 0;
+  min-height: var(--space-12);
+  padding: var(--space-1) var(--space-0-5);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.segment[data-flat] {
+  min-height: var(--ctl-h);
+}
+
+.segment:hover {
+  border-color: var(--accent-line);
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.segment:active {
+  transform: scale(0.97);
+}
+
+/* Lit: filled, brighter text and a bottom bar, so the choice reads without color too. */
+.segment:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.segment::after {
+  content: "";
+  position: absolute;
+  right: 22%;
+  bottom: 3px;
+  left: 22%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.segment:has(input:checked)::after {
+  opacity: 1;
+  transform: none;
+}
+
+.segment:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.row[data-invalid] .segment {
+  border-color: var(--danger-line);
+}
+
+.segmentInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmentInput:focus-visible {
+  outline: none;
+}
+
+.segmentNum {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+}
+
+.segment:has(input:checked) .segmentNum {
+  color: var(--accent-strong);
+}
+
+.segmentWord {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segment[data-flat] .segmentWord {
+  font-size: var(--fs-sm);
+}
+
+/* Note */
+
+.note {
+  display: block;
+  height: auto;
+  min-height: calc(var(--ctl-h) * 1.6);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+}
+
+.noteMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-1-5);
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.counter {
+  margin-left: auto;
+  color: var(--text-faint);
+}
+
+.counter[data-tone="near"] {
+  color: var(--warn);
+}
+
+.counter[data-tone="over"] {
+  color: var(--danger);
+}
+
+/* Server error, top of the form */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--danger-line);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  color: var(--text);
+}
+
+.alert > :first-child {
+  margin-top: var(--space-1);
+}
+
+.alertText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.alertTitle {
+  font-weight: var(--fw-medium);
+  color: var(--text-strong);
+}
+
+/* Saved ----------------------------------------------------------------------------------------- */
+
+.done {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  text-align: center;
+  background:
+    radial-gradient(ellipse 55% 40% at 50% 44%, var(--accent-soft), transparent 70%),
+    linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-surface) 100%);
+  animation: fadeIn var(--dur-fast) var(--ease-out) both;
+}
+
+.mark {
+  width: 76px;
+  height: 76px;
+  margin-bottom: var(--space-2);
+  overflow: visible;
+  filter: drop-shadow(0 0 10px var(--accent-line));
+}
+
+.markRing {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transform: rotate(-90deg);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: draw var(--dur-slow) var(--ease-out) forwards;
+}
+
+.markCheck {
+  fill: none;
+  stroke: var(--accent-strong);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: draw var(--dur-base) var(--ease-out) var(--dur-fast) forwards;
+}
+
+.markPulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse var(--dur-draw) var(--ease-out) var(--dur-base) 1 both;
+}
+
+.doneTitle {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-medium);
+  outline: none;
+}
+
+.doneMeta {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+/* Phone ----------------------------------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .dialog {
+    --pad-x: var(--space-4);
+    width: calc(100vw - 2 * var(--space-2));
+    max-height: calc(100dvh - 2 * var(--space-2));
+  }
+
+  .head {
+    padding-top: var(--space-4);
+  }
+
+  .title {
+    font-size: var(--fs-lg);
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+
+  .rowLabel {
+    min-height: 0;
+  }
+
+  .labelBox {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--space-1-5);
+  }
+
+  .keys,
+  .noteHint {
+    display: none;
+  }
+
+  .foot {
+    justify-content: stretch;
+  }
+
+  .save {
+    flex: 1;
+  }
+
+  .spendField {
+    max-width: none;
+  }
+
+  /* Six workout picks share ~320px: the word drops to the small size so "Custom" fits. */
+  .segment[data-flat] .segmentWord {
+    font-size: var(--fs-xs);
+    letter-spacing: -0.01em;
+  }
+}

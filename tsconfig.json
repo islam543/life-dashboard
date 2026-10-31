@@ -1,0 +1,21 @@
+{
+  // Base options shared by the server (tsconfig.server.json) and the web app (web/tsconfig.json).
+  // It also covers server/, shared/ and vitest.config.ts so editors type them correctly.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true
+  },
+  "include": ["server", "shared", "vitest.config.ts"]
+}
