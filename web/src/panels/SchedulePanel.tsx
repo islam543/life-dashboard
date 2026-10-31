@@ -13,7 +13,8 @@ import {
 } from "react";
 import type { CalendarEvent, PlanItem, ScheduleRange, SchedulePlan, SourceStatus, TaskNote } from "../../../shared/types";
 import { errorMessage } from "../api";
-import { notReady, scheduleApi } from "../api/schedule";
+import { notReady, onScheduleCommand, onTasksChanged, scheduleApi, tasksChanged, type ScheduleCommand } from "../api/schedule";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import { useSnapshot } from "../hooks/useSnapshot";
 import type { MenuSection } from "../lib/contextMenu";
 import { dayKey, formatMinutes, plural, relativeTime } from "../lib/format";
@@ -23,6 +24,9 @@ import {
   DEFAULT_TASK_MINUTES,
   SCHEDULE_VIEWS,
   TASK_LENGTHS,
+  acceptCounts,
+  acceptTarget,
+  acceptedPaths,
   buildDay,
   buildWeek,
   dayBounds,
@@ -34,9 +38,15 @@ import {
   layoutLanes,
   minuteOfDay,
   minutesToPx,
+  movingPaths,
   notPlaced,
   patchTask,
+  planFrom,
+  planHeading,
   planItems,
+  planItemsIn,
+  planRequestDate,
+  planTitle,
   daysBetween,
   rangeLabel,
   stepOffset,
@@ -70,13 +80,21 @@ import styles from "./SchedulePanel.module.css";
 // The Day/Week pick is kept in this browser; the arrows move a day or a week, up to 14 days away.
 // Add task opens an inline form (POST); a task's checkbox marks it done (PATCH); its title opens its
 // note. Overdue and unscheduled tasks wait in the "Not placed" strip with a quick Today.
-// Plan my day / week asks Claude for a proposal (POST, 30 to 60 s): ghost blocks in the timeline plus
-// a review list; accepted items become task notes. Every write shows at once and is put back if the
-// server refuses. Before the schedule server exists (501) the panel says so and nothing else.
+// Plan my day / week asks Claude for a proposal for the day shown (POST { scope, date }, 30 to 60 s):
+// ghost blocks on their own day only, plus a review list headed with the plan's real date. A proposal
+// that moves an existing task reads "Move: <title>" and that task's current slot is drawn faded.
+// Accepting creates task notes or moves the tasks, then switches to Day view on the plan's day and
+// highlights the new blocks once (not with reduced motion). Every write shows at once and is put back
+// if the server refuses. Before the schedule server exists (501) the panel says so and nothing else.
 // Right-click the panel for Add task, Plan, Day/Week and Today; a task for Mark done, Open note and
 // (when it has no place yet) Move to today; a meeting for Open in Google Calendar; the plan for its buttons.
+// Do now (DoNowPanel) talks to this panel through api/schedule: either one says when it changed a
+// task, and Do now's empty state can ask this panel to plan today or open Add task.
 
 const TITLE = "Schedule";
+/** How long accepted blocks stay highlighted (the CSS flash is shorter). */
+const FLASH_MS = 1000;
+const NO_PATHS: ReadonlySet<string> = new Set();
 const PX_PER_HOUR = 48;
 /** The shortest a block is drawn: one line of text. Shorter items are drawn this tall. */
 const MIN_BLOCK_PX = 24;
@@ -98,25 +116,47 @@ const TIP = {
   today: "Goes back to today.",
   add: "Opens a short form to add a task with a day, start time and length.",
   addOpen: "The form is open below; Cancel or Esc closes it.",
-  plan: {
-    day: "Asks Claude to fit your open tasks into today's free time; nothing is added until you accept.",
-    week: "Asks Claude to spread your open tasks over the next 7 days; nothing is added until you accept.",
-  },
   planning: "Claude is planning now; this takes about 30 to 60 seconds.",
+  moving: "Claude proposes moving this task; it moves only if you accept.",
+  showPlanDay: "Shows the plan's first day as a timeline, with the proposals on it.",
   done: "Marks this task done in its note.",
   reopen: "Marks this task not done again.",
   openNote: "Opens the task's note in the Notes view, where you can edit its details.",
   moveToday: "Sets this task's day to today, so it shows on today's schedule.",
   include: "Proposed by Claude and included; click to leave it out when you accept.",
   exclude: "Proposed by Claude and left out; click to include it when you accept.",
-  acceptSelected: "Turns the ticked items into task notes; the rest stay here to review.",
-  acceptAll: "Turns every proposed item into a task note.",
+  acceptSelected: "Adds the ticked items to your schedule (new task notes, or moves for existing tasks); the rest stay here to review.",
+  acceptAll: "Adds every proposed item to your schedule: new tasks become notes, existing ones move.",
   dismiss: "Drops this proposal; no tasks are created.",
   tryAgain: "Runs Claude again for a new proposal.",
   showDay: "Shows this day as a timeline.",
   retry: "Asks the local server for this schedule again.",
   notReady: "Checks again whether the dashboard server serves the schedule yet.",
 } as const;
+
+/** A day in a sentence: "today", "tomorrow", else "Mon 2 Nov". */
+function dayWords(key: string, todayKey: string): string {
+  const label = dayLabel(key, todayKey);
+  return label === "Today" || label === "Tomorrow" ? label.toLowerCase() : label;
+}
+
+/** What a plan request covers, in words: "today", "Mon 2 Nov", "the week from tomorrow". */
+function planWhat(scope: ScheduleView, date: string, todayKey: string): string {
+  return scope === "week" ? `the week from ${dayWords(date, todayKey)}` : dayWords(date, todayKey);
+}
+
+/** Hover help for Plan my day / week: which days Claude plans, and why it is today on a past day. */
+function planTip(scope: ScheduleView, shownFrom: string, todayKey: string): string {
+  const date = planRequestDate(shownFrom, todayKey);
+  const when = dayWords(date, todayKey);
+  if (date !== shownFrom) {
+    const over = scope === "week" ? "These days start in the past" : "This day is over";
+    return `${over}, so Claude plans ${scope === "week" ? `the 7 days from ${when}` : when}; nothing is added until you accept.`;
+  }
+  return scope === "week"
+    ? `Asks Claude to spread your open tasks over the 7 days from ${when}; nothing is added until you accept.`
+    : `Asks Claude to fit your open tasks into ${when}'s free time; nothing is added until you accept.`;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Icons
@@ -311,6 +351,27 @@ function MeetingTitle({ event, className }: { event: CalendarEvent; className?: 
 interface TaskActions {
   onToggle: (task: TaskNote, done: boolean) => void;
   onToday: (task: TaskNote) => void;
+  /** Tasks an included proposal would move: their current slot is drawn faded. */
+  moving: ReadonlySet<string>;
+  /** Tasks just placed by Accept: scrolled into view, and highlighted once unless motion is reduced. */
+  flash: ReadonlySet<string>;
+  flashAnimate: boolean;
+}
+
+/** Class and hover help for a task's current slot when a proposal would move it, or when it just landed. */
+function taskMarks(task: TaskNote, tasks: TaskActions): { className: string; tip?: string; flash?: true } {
+  const moving = tasks.moving.has(task.path) && !task.task.done;
+  const flash = tasks.flash.has(task.path);
+  return {
+    className: [moving ? styles.moving : "", flash && tasks.flashAnimate ? styles.flash : ""].filter(Boolean).join(" "),
+    tip: moving ? TIP.moving : undefined,
+    flash: flash || undefined,
+  };
+}
+
+/** Screen reader words after a task that a proposal would move. */
+function MovingNote({ task, tasks }: { task: TaskNote; tasks: TaskActions }) {
+  return tasks.moving.has(task.path) && !task.task.done ? <span className="sr-only">, Claude proposes moving it</span> : null;
 }
 
 function taskMenu(task: TaskNote, actions: TaskActions, canMoveToday: boolean): MenuSection {
@@ -339,7 +400,7 @@ interface PlanActions {
 function planMenu(item: PlanItem, plan: PlanActions): MenuSection {
   const on = plan.selected.has(item.id);
   return {
-    title: item.title,
+    title: planTitle(item),
     items: [{ label: on ? "Leave out of plan" : "Include in plan", onSelect: () => plan.onToggle(item.id), tip: on ? TIP.include : TIP.exclude }],
   };
 }
@@ -424,12 +485,20 @@ function TimelineBlock({
 
   if (block.kind === "task") {
     const t = block.task;
+    const marks = taskMarks(t, tasks);
     return (
-      <li {...menu} className={[...cls, t.task.done ? styles.isDone : ""].join(" ")} style={style}>
+      <li
+        {...menu}
+        className={[...cls, t.task.done ? styles.isDone : "", marks.className].join(" ")}
+        style={style}
+        data-tip={marks.tip}
+        data-flash={marks.flash}
+      >
         <TaskCheck task={t} onToggle={tasks.onToggle} />
         <span className={styles.blockText}>
           <BlockTime what="Task" span={span} shown={compact ? formatHm(block.start) : span} />
           <NoteLink task={t} className={styles.blockTitle} />
+          <MovingNote task={t} tasks={tasks} />
         </span>
       </li>
     );
@@ -483,6 +552,18 @@ function DayTimeline({
     // Only when the day changes, not every minute.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.date]);
+
+  // Just after Accept: bring the first block that landed into view instead (runs after the one above).
+  const landed = tasks.flash.size ? [...tasks.flash].sort().join("\n") : "";
+  useLayoutEffect(() => {
+    const host = ref.current;
+    if (!host || !landed) return;
+    const el = host.querySelector<HTMLElement>("[data-flash]");
+    const scroller = scrollerOf(host);
+    if (!el || !scroller) return;
+    const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 3);
+  }, [landed, model.date]);
 
   return (
     <div ref={ref} className={styles.timeline} style={{ height }}>
@@ -543,11 +624,19 @@ function AllDayChip({ event }: { event: CalendarEvent }) {
 
 function TaskRow({ task, tasks, todayKey, meta, unplaced }: { task: TaskNote; tasks: TaskActions; todayKey: string; meta?: ReactNode; unplaced?: UnplacedTask["reason"] }) {
   const menu = useMenuRegion(() => taskMenu(task, tasks, !!unplaced));
+  const marks = taskMarks(task, tasks);
   return (
-    <li {...menu} className={[styles.taskRow, task.task.done ? styles.isDone : ""].join(" ")} data-task-path={task.path}>
+    <li
+      {...menu}
+      className={[styles.taskRow, task.task.done ? styles.isDone : "", marks.className].join(" ")}
+      data-task-path={task.path}
+      data-tip={marks.tip}
+      data-flash={marks.flash}
+    >
       <TaskCheck task={task} onToggle={tasks.onToggle} />
       <span className={styles.taskText}>
         <NoteLink task={task} className={styles.taskTitle} />
+        <MovingNote task={task} tasks={tasks} />
         <span className={styles.taskMeta}>
           {unplaced === "overdue" && task.task.due ? (
             <span className={styles.overdue}>
@@ -587,7 +676,7 @@ function PlanRow({ item, plan }: { item: PlanItem; plan: PlanActions }) {
       <button type="button" className={styles.ghostButton} aria-pressed={on} onClick={() => plan.onToggle(item.id)} data-tip={on ? TIP.include : TIP.exclude}>
         <span className="sr-only">Proposed by Claude, {on ? "included" : "left out"}: </span>
         <AiTag />
-        <span className={styles.blockTitle}>{item.title}</span>
+        <span className={styles.blockTitle}>{planTitle(item)}</span>
         {item.minutes ? <span className={styles.ghostWhen}>{formatMinutes(item.minutes)}</span> : null}
       </button>
     </li>
@@ -618,8 +707,14 @@ function WeekItem({ row, tasks, plan }: { row: WeekRow; tasks: TaskActions; plan
     );
   }
   if (row.kind === "task") {
+    const marks = taskMarks(row.task, tasks);
     return (
-      <li {...menu} className={[styles.weekRow, styles.task, row.task.task.done ? styles.isDone : ""].join(" ")}>
+      <li
+        {...menu}
+        className={[styles.weekRow, styles.task, row.task.task.done ? styles.isDone : "", marks.className].join(" ")}
+        data-tip={marks.tip}
+        data-flash={marks.flash}
+      >
         <TaskCheck task={row.task} onToggle={tasks.onToggle} />
         <span className={styles.weekText}>
           <span className={styles.weekTime}>
@@ -627,6 +722,7 @@ function WeekItem({ row, tasks, plan }: { row: WeekRow; tasks: TaskActions; plan
             {time}
           </span>
           <NoteLink task={row.task} className={styles.weekTitle} />
+          <MovingNote task={row.task} tasks={tasks} />
         </span>
       </li>
     );
@@ -858,13 +954,13 @@ function AddTaskForm({
 // AI plan review
 // ---------------------------------------------------------------------------------------------
 
-function PlanRunning({ scope, startedAt, now }: { scope: ScheduleView; startedAt: number; now: number }) {
+function PlanRunning({ what, startedAt, now }: { what: string; startedAt: number; now: number }) {
   const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
   return (
     <div className={styles.planRunning}>
       <p className={styles.planRunningLine}>
         <Spinner size={14} />
-        <span>Claude is planning your {scope}</span>
+        <span>Claude is planning {what}</span>
       </p>
       <p className={styles.planHint}>
         This takes about 30 to 60 seconds. <span className={styles.mono}>{seconds} s</span> so far.
@@ -881,6 +977,7 @@ function PlanReview({
   now,
   busy,
   projectName,
+  jump,
   onToggle,
   onAccept,
   onDismiss,
@@ -892,18 +989,22 @@ function PlanReview({
   now: Date;
   busy: "accept" | "acceptAll" | "dismiss" | null;
   projectName: (id: string | null) => string | null;
+  /** When the plan's first day is not on screen: a button that shows it. */
+  jump: { label: string; onShow: () => void } | null;
   onToggle: (id: string) => void;
   onAccept: (ids: string[], all: boolean) => void;
   onDismiss: () => void;
 }) {
   const uid = useId().replace(/:/g, "");
   const chosen = items.filter((i) => selected.has(i.id)).map((i) => i.id);
+  const heading = planHeading(plan, todayKey);
   const menu = useMenuRegion(() => ({
-    title: "AI plan",
+    title: heading,
     items: [
       { label: `Accept selected (${chosen.length})`, onSelect: () => onAccept(chosen, false), disabled: chosen.length === 0 ? "Tick at least one item first." : !!busy, tip: TIP.acceptSelected },
       { label: "Accept all", onSelect: () => onAccept(items.map((i) => i.id), true), disabled: !!busy, tip: TIP.acceptAll },
       { label: "Dismiss plan", onSelect: onDismiss, disabled: !!busy, tip: TIP.dismiss },
+      jump ? { label: jump.label, onSelect: jump.onShow, tip: TIP.showPlanDay } : null,
     ],
   }));
   return (
@@ -911,7 +1012,7 @@ function PlanReview({
       <header className={styles.reviewHead}>
         <h3 id={`${uid}-h`} className={styles.reviewTitle}>
           <StatusDot tone="ai" size={8} glow={false} />
-          AI plan for {plan.scope === "week" ? "the week" : "today"}
+          {heading}
         </h3>
         {plan.generatedAt ? (
           <time className={styles.reviewMeta} dateTime={plan.generatedAt}>
@@ -919,7 +1020,15 @@ function PlanReview({
           </time>
         ) : null}
       </header>
-      <p className={styles.planHint}>Tick what you want, then accept. Nothing is added until you do.</p>
+      <p className={styles.planHint}>Tick what you want, then accept. Nothing is added or moved until you do.</p>
+      {jump ? (
+        <p className={styles.planJump}>
+          <span>The proposals show on their own day.</span>
+          <Button variant="ghost" size="sm" onClick={jump.onShow} tip={TIP.showPlanDay}>
+            {jump.label}
+          </Button>
+        </p>
+      ) : null}
       <ul className={styles.reviewList}>
         {items.map((item) => {
           const project = projectName(item.projectId);
@@ -939,7 +1048,7 @@ function PlanReview({
                   </svg>
                 </span>
                 <span className={styles.reviewText}>
-                  <span className={styles.reviewItemTitle}>{item.title}</span>
+                  <span className={styles.reviewItemTitle}>{planTitle(item)}</span>
                   <span className={styles.reviewWhen}>
                     {whenText(item.date, item.start, item.minutes, todayKey)}
                     {project ? `, ${project}` : ""}
@@ -1025,6 +1134,17 @@ function ActionError({ message, onClose }: { message: string; onClose: () => voi
   );
 }
 
+/** The server's note after Accept, e.g. a moved task whose note no longer exists was skipped. */
+function AcceptNote({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className={styles.acceptNote} role="status">
+      <StatusDot tone="warn" size={9} glow={false} />
+      <p>{message}</p>
+      <Button variant="ghost" size="sm" icon={<CloseIcon />} onClick={onClose} aria-label="Hide this note" tip="Hides this note; the schedule stays as it is." />
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------------------------
@@ -1064,8 +1184,9 @@ export function SchedulePanel() {
   const projectName = useCallback((id: string | null) => (id ? (projectList?.find((p) => p.id === id)?.name ?? null) : null), [projectList]);
 
   // ----- AI plan
+  const reduced = useReducedMotion();
   const [plan, setPlan] = useState<SchedulePlan | null>(null);
-  const [running, setRunning] = useState<{ scope: ScheduleView; startedAt: number } | null>(null);
+  const [running, setRunning] = useState<{ what: string; startedAt: number } | null>(null);
   const [planBusy, setPlanBusy] = useState<"accept" | "acceptAll" | "dismiss" | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -1097,6 +1218,7 @@ export function SchedulePanel() {
   }, [running]);
 
   const items = planItems(plan);
+  const planDay = items.length ? planFrom(plan) : null;
   const toggleSelected = useCallback((id: string) => {
     setSelected((s) => {
       const next = new Set(s);
@@ -1106,40 +1228,84 @@ export function SchedulePanel() {
     });
   }, []);
   const planActions: PlanActions = { selected, onToggle: toggleSelected };
+  const moving = useMemo(() => movingPaths(items, selected), [items, selected]);
 
-  const runPlan = async () => {
+  // Tasks that just landed from Accept: highlighted once, then cleared a second after they show.
+  const [landed, setLanded] = useState<ReadonlySet<string>>(NO_PATHS);
+  const shownReady = !!range && !sched.loading;
+  useEffect(() => {
+    if (!landed.size || !shownReady) return;
+    const id = setTimeout(() => setLanded(NO_PATHS), FLASH_MS);
+    return () => clearTimeout(id);
+  }, [landed, shownReady]);
+
+  /** What the server skipped on the last Accept (a moved task's note gone), shown until hidden. */
+  const [acceptNote, setAcceptNote] = useState<string | null>(null);
+
+  /** The last plan request, so Try again repeats it even after moving to another day. */
+  const lastRequest = useRef<{ scope: ScheduleView; date: string } | null>(null);
+
+  /** Plan the given days: by default the ones the panel shows (today instead of a past day). */
+  const runPlan = async (scope: ScheduleView = view, date: string = planRequestDate(from, todayKey)) => {
     if (running) return;
-    const scope = view;
-    setOffset(0);
+    lastRequest.current = { scope, date };
+    const what = planWhat(scope, date, todayKey);
     setPlanError(null);
-    setRunning({ scope, startedAt: Date.now() });
+    setAcceptNote(null);
+    setRunning({ what, startedAt: Date.now() });
     setTickNow(Date.now());
-    setAnnouncement(`Planning your ${scope}. This takes about 30 to 60 seconds.`);
+    setAnnouncement(`Planning ${what}. This takes about 30 to 60 seconds.`);
     try {
-      const next = await scheduleApi.runPlan(scope);
+      const next = await scheduleApi.runPlan({ scope, date });
       setPlan(next);
       if (next.status === "ready") {
-        setAnnouncement(next.items.length ? `Plan ready: ${plural(next.items.length, "item")} to review.` : "Claude found nothing to add.");
+        setAnnouncement(
+          next.items.length
+            ? `${planHeading(next, todayKey)} ready: ${plural(next.items.length, "item")} to review.`
+            : `Claude found nothing to add for ${what}.${next.message ? ` ${next.message}` : ""}`,
+        );
       } else if (next.status === "error") {
         setAnnouncement("Planning failed.");
       }
     } catch (err) {
-      setPlanError(`Couldn't plan your ${scope}. ${errorMessage(err)}`);
+      setPlanError(`Couldn't plan ${what}. ${errorMessage(err)}`);
       setAnnouncement("Planning failed.");
     } finally {
       setRunning(null);
     }
   };
 
+  /** Day view on `date`, at any distance (a plan may sit past the arrows' 14 days). */
+  const showDay = (date: string) => {
+    const days = daysBetween(todayKey, date);
+    if (Number.isFinite(days)) setOffset(days);
+    setView("day");
+  };
+
   const acceptPlan = async (ids: string[], all: boolean) => {
-    if (planBusy || ids.length === 0) return;
+    if (planBusy || ids.length === 0 || !plan) return;
+    const before = plan;
+    const target = acceptTarget(before, ids);
+    const counts = acceptCounts(before.items, ids);
     setPlanBusy(all ? "acceptAll" : "accept");
     setPlanError(null);
+    setAcceptNote(null);
     try {
-      const { created } = await scheduleApi.acceptPlan(ids);
+      const { created, message: skipped } = await scheduleApi.acceptPlan(ids);
       sched.edit((r) => created.reduce(withTask, r));
       setPlan((p) => (p ? withoutPlanItems(p, ids) : p));
-      setAnnouncement(`Added ${plural(created.length, "task")} from the plan.`);
+      // Show the day the tasks landed on, read it fresh, and highlight them once.
+      if (target) showDay(target);
+      sched.reload();
+      setLanded(acceptedPaths(created, before.items, ids));
+      const parts = [counts.added ? `Added ${plural(counts.added, "task")}` : "", counts.moved ? `moved ${plural(counts.moved, "task")}` : ""].filter(Boolean);
+      const done = parts.length ? parts.join(" and ") : `Added ${plural(created.length, "task")}`;
+      const note = skipped?.trim() ? skipped.trim().replace(/\.?$/, ".") : null;
+      setAcceptNote(note);
+      setAnnouncement(
+        `${done[0]!.toUpperCase()}${done.slice(1)} from the plan.${target ? ` Showing ${dayWords(target, todayKey)}.` : ""}${note ? ` ${note}` : ""}`,
+      );
+      tasksChanged("schedule");
       planRef.current?.focus({ preventScroll: true });
     } catch (err) {
       setPlanError(`Couldn't accept the plan. ${errorMessage(err)}`);
@@ -1192,6 +1358,7 @@ export function SchedulePanel() {
     try {
       const saved = await scheduleApi.updateTask(task.path, { done });
       sched.edit((r) => withTask(r, saved));
+      tasksChanged("schedule");
     } catch (err) {
       sched.edit((r) => patchTask(r, task.path, { done: !done }));
       setActionError(`Couldn't update "${task.title}". ${errorMessage(err)}`);
@@ -1207,13 +1374,20 @@ export function SchedulePanel() {
     try {
       const saved = await scheduleApi.updateTask(task.path, { due: todayKey });
       sched.edit((r) => withTask(r, saved));
+      tasksChanged("schedule");
     } catch (err) {
       sched.edit((r) => patchTask(r, task.path, { due: before }));
       setActionError(`Couldn't move "${task.title}" to today. ${errorMessage(err)}`);
     }
   };
 
-  const taskActions: TaskActions = { onToggle: (t, d) => void toggleDone(t, d), onToday: (t) => void moveToday(t) };
+  const taskActions: TaskActions = {
+    onToggle: (t, d) => void toggleDone(t, d),
+    onToday: (t) => void moveToday(t),
+    moving,
+    flash: landed,
+    flashAnimate: !reduced,
+  };
 
   // ----- add task
   // The form starts on the day shown (never a past one); moving days while it is open keeps what was typed.
@@ -1235,6 +1409,7 @@ export function SchedulePanel() {
       const created = await scheduleApi.createTask(input);
       sched.edit((r) => withTask(r, created));
       setAnnouncement(`Added: ${created.title}, ${whenText(created.task.due, created.task.start, null, todayKey)}.`);
+      tasksChanged("schedule");
       closeForm();
       return null;
     } catch (err) {
@@ -1245,16 +1420,35 @@ export function SchedulePanel() {
   // ----- navigation
   const prev = stepOffset(offset, view, -1);
   const next = stepOffset(offset, view, 1);
-  const showDay = (date: string) => {
-    const days = daysBetween(todayKey, date);
-    if (Number.isFinite(days)) setOffset(days);
-    setView("day");
-  };
 
   // ----- what to show
   const ready = !!sched.data && !sched.notReady;
+
+  // ----- the other task panel: Do now's writes re-read this range; its empty state can ask for a plan
+  // of today or the Add task form (only once this panel can act on it).
+  const reloadRange = sched.reload;
+  useEffect(
+    () =>
+      onTasksChanged((source) => {
+        if (source !== "schedule") reloadRange();
+      }),
+    [reloadRange],
+  );
+  const commandRef = useRef<(command: ScheduleCommand) => void>(() => undefined);
+  commandRef.current = (command) => {
+    planRef.current?.closest("section")?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    setOffset(0);
+    setView("day");
+    if (command === "plan-day") {
+      planRef.current?.focus({ preventScroll: true });
+      void runPlan("day", todayKey);
+    } else {
+      setFormOpen(true);
+    }
+  };
+  useEffect(() => (ready ? onScheduleCommand((command) => commandRef.current(command)) : undefined), [ready]);
   const isEmptyRange =
-    !!range && range.days.every((d) => d.events.length === 0 && d.tasks.length === 0) && !items.some((i) => i.date >= from && i.date <= to);
+    !!range && range.days.every((d) => d.events.length === 0 && d.tasks.length === 0) && planItemsIn(items, from, to).length === 0;
   const dayModel = useMemo(() => (range && view === "day" ? buildDay(range.days.find((d) => d.date === from), from, items) : null), [range, view, from, items]);
   const weekColumns = useMemo(() => (view === "week" ? buildWeek(range, from, todayKey, items) : []), [range, view, from, todayKey, items]);
   const cal = range ? calendarLine(range.calendar.status, range.calendar.message) : null;
@@ -1389,9 +1583,14 @@ export function SchedulePanel() {
     ) : null;
 
     const review = running ? (
-      <PlanRunning scope={running.scope} startedAt={running.startedAt} now={tickNow} />
+      <PlanRunning what={running.what} startedAt={running.startedAt} now={tickNow} />
     ) : planError ? (
-      <PlanProblem message={planError} onRetry={() => void runPlan()} onDismiss={() => setPlanError(null)} canDismiss />
+      <PlanProblem
+        message={planError}
+        onRetry={() => void (lastRequest.current ? runPlan(lastRequest.current.scope, planRequestDate(lastRequest.current.date, todayKey)) : runPlan())}
+        onDismiss={() => setPlanError(null)}
+        canDismiss
+      />
     ) : plan?.status === "error" ? (
       <PlanProblem
         message={`Claude couldn't make a plan.${plan.message ? ` ${plan.message.trim().replace(/\.?$/, ".")}` : ""}`}
@@ -1408,6 +1607,7 @@ export function SchedulePanel() {
         now={now}
         busy={planBusy}
         projectName={projectName}
+        jump={planDay && !(view === "day" ? from === planDay : planDay >= from && planDay <= to) ? { label: `Show ${dayWords(planDay, todayKey)}`, onShow: () => showDay(planDay) } : null}
         onToggle={toggleSelected}
         onAccept={(ids, all) => void acceptPlan(ids, all)}
         onDismiss={() => void dismissPlan()}
@@ -1417,6 +1617,7 @@ export function SchedulePanel() {
     body = (
       <div ref={bodyRef} className={styles.content}>
         {actionError ? <ActionError message={actionError} onClose={() => setActionError(null)} /> : null}
+        {acceptNote ? <AcceptNote message={acceptNote} onClose={() => setAcceptNote(null)} /> : null}
         {cal ? (
           <p className={styles.calendarNote}>
             <StatusDot tone={cal.tone} size={9} glow={false} />
@@ -1500,7 +1701,7 @@ export function SchedulePanel() {
         onClick={() => void runPlan()}
         loading={!!running}
         loadingLabel="Planning"
-        tip={running ? TIP.planning : TIP.plan[view]}
+        tip={running ? TIP.planning : planTip(view, from, todayKey)}
       >
         {planLabel}
       </Button>
@@ -1510,7 +1711,7 @@ export function SchedulePanel() {
   const menu: MenuSection["items"] = ready
     ? [
         { label: "Add task", onSelect: () => setFormOpen(true), disabled: formOpen ? "The form is already open." : false, tip: TIP.add },
-        { label: running ? "Planning" : planLabel, onSelect: () => void runPlan(), disabled: running ? TIP.planning : false, tip: TIP.plan[view] },
+        { label: running ? "Planning" : planLabel, onSelect: () => void runPlan(), disabled: running ? TIP.planning : false, tip: planTip(view, from, todayKey) },
         { label: view === "day" ? "Show week" : "Show day", onSelect: () => setView(view === "day" ? "week" : "day"), tip: VIEW_OPTIONS.find((o) => o.value !== view)?.tip },
         offset !== 0 ? { label: "Go to today", onSelect: () => setOffset(0), tip: TIP.today } : null,
       ]

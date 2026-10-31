@@ -72,10 +72,13 @@ export function stepDays(view: ScheduleView): number {
   return view === "week" ? 7 : 1;
 }
 
-/** The next offset (days from today) after one arrow press, or null when it would pass the limit. */
+/**
+ * The next offset (days from today) after one arrow press, or null when it would pass the limit.
+ * Past the limit (after accepting a plan for a far day) the arrows still step back towards today.
+ */
 export function stepOffset(offset: number, view: ScheduleView, dir: 1 | -1): number | null {
   const next = offset + dir * stepDays(view);
-  return Math.abs(next) > MAX_OFFSET_DAYS ? null : next;
+  return Math.abs(next) > MAX_OFFSET_DAYS && Math.abs(next) >= Math.abs(offset) ? null : next;
 }
 
 /** The days a view shows: one day, or seven from the start day. `from`/`to` go to GET /api/schedule. */
@@ -311,7 +314,7 @@ export function buildDay(day: ScheduleDay | undefined, date: string, plan: reado
   for (const item of plan) {
     if (item.date !== date) continue;
     const span = itemSpan(item.start, item.minutes);
-    if (span) blocks.push({ kind: "plan", id: `plan:${item.id}`, ...span, title: item.title, plan: item });
+    if (span) blocks.push({ kind: "plan", id: `plan:${item.id}`, ...span, title: planTitle(item), plan: item });
     else anytimePlan.push(item);
   }
   blocks.sort((a, b) => a.start - b.start || a.end - b.end || a.title.localeCompare(b.title));
@@ -393,7 +396,7 @@ export function buildWeek(
     for (const item of plan) {
       if (item.date !== key) continue;
       const span = itemSpan(item.start, item.minutes);
-      rows.push({ kind: "plan", id: `plan:${item.id}`, start: span?.start ?? null, end: span?.end ?? null, title: item.title, plan: item });
+      rows.push({ kind: "plan", id: `plan:${item.id}`, start: span?.start ?? null, end: span?.end ?? null, title: planTitle(item), plan: item });
     }
     // All-day meetings first, then by time, then tasks and plan items with no time.
     const rank = (r: WeekRow) => (r.start !== null ? 1 : r.kind === "event" ? 0 : 2);
@@ -511,4 +514,86 @@ export function planItems(plan: SchedulePlan | null): PlanItem[] {
 export function withoutPlanItems(plan: SchedulePlan, ids: readonly string[]): SchedulePlan {
   const gone = new Set(ids);
   return { ...plan, items: plan.items.filter((i) => !gone.has(i.id)) };
+}
+
+/** A proposal's title as shown: "Move: <title>" when it moves an existing task, else the title. */
+export function planTitle(item: Pick<PlanItem, "title" | "taskPath">): string {
+  return item.taskPath ? `Move: ${item.title}` : item.title;
+}
+
+/** The proposals on days from `from` to `to` (inclusive): the ghost blocks a view can show. */
+export function planItemsIn(items: readonly PlanItem[], from: string, to: string): PlanItem[] {
+  return items.filter((i) => i.date >= from && i.date <= to);
+}
+
+/** Paths of existing tasks that included proposals would move: their current slot is drawn faded. */
+export function movingPaths(items: readonly PlanItem[], selected: ReadonlySet<string>): Set<string> {
+  const paths = new Set<string>();
+  for (const i of items) if (i.taskPath && selected.has(i.id)) paths.add(i.taskPath);
+  return paths;
+}
+
+/**
+ * The day a plan request names (POST /api/schedule/plan `date`): the first day the panel shows, or
+ * today when that day is already past (Claude never plans the past).
+ */
+export function planRequestDate(shownFrom: string, todayKey: string): string {
+  return shownFrom < todayKey ? todayKey : shownFrom;
+}
+
+/** The plan's first day: `from`, else the earliest item date (a plan saved before v1.3), else null. */
+export function planFrom(plan: Pick<SchedulePlan, "from" | "items"> | null): string | null {
+  if (!plan) return null;
+  if (plan.from && parseDayKey(plan.from)) return plan.from;
+  const dates = plan.items.map((i) => i.date).filter((d) => !!parseDayKey(d)).sort();
+  return dates[0] ?? null;
+}
+
+/**
+ * Plan review heading, from the plan's own first day so it never claims "today" for another day:
+ * "AI plan for today, Sat 31 Oct", "AI plan for tomorrow, Sun 1 Nov", "AI plan for Mon 2 Nov",
+ * "AI plan for the week from Mon 2 Nov". Just "AI plan" when the day is unknown.
+ */
+export function planHeading(plan: Pick<SchedulePlan, "scope" | "from" | "items">, todayKey: string): string {
+  const from = planFrom(plan);
+  if (!from) return "AI plan";
+  const diff = daysBetween(todayKey, from);
+  const named = diff === 0 ? `today, ${shortDate(from)}` : diff === 1 ? `tomorrow, ${shortDate(from)}` : shortDate(from);
+  return plan.scope === "week" ? `AI plan for the week from ${named}` : `AI plan for ${named}`;
+}
+
+/**
+ * The day the panel shows after Accept: the plan's first day when an accepted item is on it, else the
+ * earliest day among the accepted items. Null when none of the ids is in the plan.
+ */
+export function acceptTarget(plan: Pick<SchedulePlan, "from" | "items">, ids: readonly string[]): string | null {
+  const chosen = new Set(ids);
+  const dates = plan.items
+    .filter((i) => chosen.has(i.id) && !!parseDayKey(i.date))
+    .map((i) => i.date)
+    .sort();
+  if (!dates.length) return null;
+  const from = planFrom(plan);
+  return from && dates.includes(from) ? from : dates[0]!;
+}
+
+/** How many accepted items create a new task and how many move an existing one. */
+export function acceptCounts(items: readonly PlanItem[], ids: readonly string[]): { added: number; moved: number } {
+  const chosen = new Set(ids);
+  let added = 0;
+  let moved = 0;
+  for (const i of items) {
+    if (!chosen.has(i.id)) continue;
+    if (i.taskPath) moved += 1;
+    else added += 1;
+  }
+  return { added, moved };
+}
+
+/** Task paths to highlight once after Accept: every task the server answered, plus the moved ones. */
+export function acceptedPaths(created: readonly Pick<TaskNote, "path">[], items: readonly PlanItem[], ids: readonly string[]): Set<string> {
+  const chosen = new Set(ids);
+  const paths = new Set(created.map((t) => t.path));
+  for (const i of items) if (i.taskPath && chosen.has(i.id)) paths.add(i.taskPath);
+  return paths;
 }

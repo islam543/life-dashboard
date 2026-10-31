@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import type { JiraCreated, JiraCreateResult, JiraDraftIssue } from "../../shared/types";
+import type { JiraCreated, JiraCreateResult, JiraDraftIssue, JiraStatusChoice } from "../../shared/types";
 import { oneLine } from "../ai/validate";
 import type { ProcessRunner, RunResult } from "../ai/nextMoves";
 import {
@@ -10,6 +10,7 @@ import {
   issueKeyPattern,
   jiraRunArgs,
   runAnswer,
+  statusFor,
   type RunFailure,
 } from "./draft";
 
@@ -36,6 +37,8 @@ export interface CreateSettings {
   accountId: string;
   /** The only project issues go into (config JIRA_PROJECT_KEY). */
   projectKey: string;
+  /** The project's required Product field (config jira.product); sent on every issue when set. */
+  product?: { field: string; workspaceId: string; objectId: string };
   timeoutMs: number;
 }
 
@@ -50,6 +53,27 @@ export interface IssuePayload {
   assignee_account_id: string;
   /** Tasks under an epic only. */
   parent?: string;
+  /** Required custom fields, from config only: AN's Product as an Assets object reference. */
+  additional_fields?: Record<string, { workspaceId: string; id: string; objectId: string }[]>;
+  /** Workflow transition applied as the issue is created, so it lands in the chosen status. */
+  transition?: { id: string };
+}
+
+/**
+ * AN workflow transitions by chosen status (read from qicbizdev on 2026-10-31). Task transitions are
+ * global, so they apply right at creation. Epics use another workflow: they start in Backlog and only
+ * In Progress (21) applies without a screen. A missing entry means "stay in the starting status".
+ */
+export const STATUS_TRANSITIONS: Readonly<Record<"Task" | "Epic", Partial<Record<JiraStatusChoice, string>>>> = {
+  Task: { backlog: "11", todo: "61", inprogress: "31", onhold: "81", done: "41" },
+  Epic: { inprogress: "21" },
+};
+
+/** The Product field value in the shape Jira stores it: [{ workspaceId, id: "<ws>:<object>", objectId }]. */
+export function productField(product: NonNullable<CreateSettings["product"]>): NonNullable<IssuePayload["additional_fields"]> {
+  return {
+    [product.field]: [{ workspaceId: product.workspaceId, id: `${product.workspaceId}:${product.objectId}`, objectId: product.objectId }],
+  };
 }
 
 /** Epics first (they have no parent), then Tasks, each in the order given. */
@@ -63,7 +87,7 @@ export function createOrder(issues: readonly JiraDraftIssue[]): { epics: JiraDra
  */
 export function buildPayload(
   issue: JiraDraftIssue,
-  settings: Pick<CreateSettings, "site" | "accountId" | "projectKey">,
+  settings: Pick<CreateSettings, "site" | "accountId" | "projectKey" | "product">,
   newEpicKeys: ReadonlyMap<string, string>,
 ): { ok: true; payload: IssuePayload } | { ok: false; error: string } {
   const payload: IssuePayload = {
@@ -75,6 +99,9 @@ export function buildPayload(
     description: issue.description,
     assignee_account_id: settings.accountId,
   };
+  if (settings.product) payload.additional_fields = productField(settings.product);
+  const transition = STATUS_TRANSITIONS[issue.type][statusFor(issue.type, issue.status)];
+  if (transition) payload.transition = { id: transition };
   if (issue.type === "Task" && issue.parent !== null) {
     if (issue.parent.kind === "existing") {
       payload.parent = issue.parent.key;

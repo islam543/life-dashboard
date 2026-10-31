@@ -1,4 +1,4 @@
-import type { DetectedAction, JiraDraftIssue, JiraEpicRef, JiraParent } from "../../shared/types";
+import type { DetectedAction, JiraDraftIssue, JiraEpicRef, JiraParent, JiraStatusChoice } from "../../shared/types";
 import { BLOCKED_TOOLS, NOT_LOGGED_IN_MESSAGE, type RunResult } from "../ai/nextMoves";
 import { looksLikeAuthFailure, oneLine, parseEnvelope } from "../ai/validate";
 import { signInMessage } from "../connectors/tools";
@@ -295,6 +295,23 @@ function stringList(value: unknown): string[] | null {
   return value.every((v) => typeof v === "string") ? (value as string[]) : null;
 }
 
+/** Statuses an issue can be created in. Epics start in Backlog and can only go to In Progress at once. */
+export const STATUS_CHOICES: Readonly<Record<"Task" | "Epic", readonly JiraStatusChoice[]>> = {
+  Task: ["todo", "inprogress", "onhold", "done", "backlog"],
+  Epic: ["backlog", "inprogress"],
+};
+export const DEFAULT_STATUS: Readonly<Record<"Task" | "Epic", JiraStatusChoice>> = { Task: "todo", Epic: "backlog" };
+
+/**
+ * The status to create an issue in: the given one when it is allowed for the type, else the default.
+ * Lenient on purpose: a status only decides the board column, so a bad one never sinks the draft.
+ */
+export function statusFor(type: "Task" | "Epic", value: unknown): JiraStatusChoice {
+  return typeof value === "string" && (STATUS_CHOICES[type] as readonly string[]).includes(value)
+    ? (value as JiraStatusChoice)
+    : DEFAULT_STATUS[type];
+}
+
 /**
  * The draft rules, for the model's answer and for Islam's edited issues alike. Any bad issue rejects
  * the whole list, with a message that names it. Extra keys are dropped; text is cleaned.
@@ -360,7 +377,7 @@ export function validateDraftIssues(raw: unknown, rules: IssueRules): IssuesChec
         return { ok: false, error: `${where} has a malformed parent` };
       }
     }
-    issues.push({ draftId, actionIds: [...actionIds], type, summary, description, parent });
+    issues.push({ draftId, actionIds: [...actionIds], type, summary, description, parent, status: statusFor(type, item.status) });
   }
 
   // Pass 2: references between issues.

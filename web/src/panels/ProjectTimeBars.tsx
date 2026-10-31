@@ -219,7 +219,10 @@ export function ChartTooltip({ tip, hostWidth }: { tip: TipData | null; hostWidt
 // Time by project
 // ---------------------------------------------------------------------------------------------
 
-const RANGES: readonly SegmentedOption<TimeRange>[] = [
+/** The periods this panel offers. lib/timeAgg also knows "last30" (the old Home panel's range). */
+type BarRange = Exclude<TimeRange, "last30">;
+
+const RANGES: readonly SegmentedOption<BarRange>[] = [
   { value: "week", label: "Week", tip: "Shows Claude Code time since Sunday; the pick is kept in this browser." },
   { value: "month", label: "Month", tip: "Shows Claude Code time since the 1st; the pick is kept in this browser." },
 ];
@@ -437,7 +440,7 @@ function Bars({ rows, total, period, daysSoFar }: { rows: BarRow[]; total: numbe
   );
 }
 
-const EMPTY: Record<TimeRange, { empty: string; hint: string }> = {
+const EMPTY: Record<BarRange, { empty: string; hint: string }> = {
   week: {
     empty: "No Claude Code time this week yet.",
     hint: "Switch to Month to see earlier work, or start a session in any project.",
@@ -446,26 +449,18 @@ const EMPTY: Record<TimeRange, { empty: string; hint: string }> = {
     empty: "No Claude Code time this month yet.",
     hint: "Time shows here after your first Claude Code session of the month.",
   },
-  last30: {
-    empty: "No Claude Code time in the last 30 days.",
-    hint: "Time shows here after your next Claude Code session in any project.",
-  },
 };
 
-/**
- * Claude Code time per project. Without `fixedRange` it has the Week / Month toggle (kept in this
- * browser); with one, it always shows that range and has no toggle (Home's "last 30 days" panel).
- */
-export function ProjectTimeBars({ fixedRange }: { fixedRange?: TimeRange } = {}) {
+/** Claude Code time per project, with the Week / Month toggle (kept in this browser). */
+export function ProjectTimeBars() {
   const snap = useSnapshot();
-  const [chosen, setRange] = useStoredChoice<TimeRange>("life-dashboard:time-range", RANGE_VALUES, "week");
-  const range = fixedRange ?? chosen;
+  const [range, setRange] = useStoredChoice<BarRange>("life-dashboard:time-range", RANGE_VALUES, "week");
   const now = new Date();
   const today = dayKey(now);
   const sessions = snap.data?.work.sessionTime;
 
   const registry = snap.data?.projects;
-  // On ultrawide screens the right column holds this panel and the 30-day one, so each lists 8.
+  // On ultrawide screens this panel shares the right column with Do now; 8 bars plus Other fit its part.
   const barCount = 8;
   // `today` keeps the totals right across midnight without recomputing on every render.
   const { rows, total } = useMemo(() => {
@@ -486,7 +481,7 @@ export function ProjectTimeBars({ fixedRange }: { fixedRange?: TimeRange } = {})
     empty: EMPTY[range].empty,
     emptyHint: EMPTY[range].hint,
   });
-  const showToggle = !fixedRange && (status.state === "ok" || status.state === "empty");
+  const showToggle = status.state === "ok" || status.state === "empty";
   const other = RANGES.find((r) => r.value !== range);
   const menu: MenuSection["items"] = [
     showToggle && other ? { label: `Show this ${other.value}`, onSelect: () => setRange(other.value), tip: other.tip } : null,
@@ -499,7 +494,7 @@ export function ProjectTimeBars({ fixedRange }: { fixedRange?: TimeRange } = {})
 
   return (
     <Panel
-      title={range === "last30" ? "Time by project, last 30 days" : "Time by project"}
+      title="Time by project"
       fit
       {...status}
       skeleton="chart"

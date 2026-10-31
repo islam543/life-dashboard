@@ -6,12 +6,22 @@ import { isNextMovesFile } from "../ai/validate";
 import { createSchedulePlan, PLAN_RUN_DIR, type PlanData, type SchedulePlanService } from "../ai/schedulePlan";
 import { config } from "../config";
 import type { NotesStore } from "../notes";
-import { buildScheduleRange, createTask, parseNewTaskInput, parseRangeQuery, parseTaskPatch, patchTask, taskNotes } from "../schedule";
+import { isTaskDate } from "../notesFrontmatter";
+import {
+  buildScheduleRange,
+  createTask,
+  parseNewTaskInput,
+  parseRangeQuery,
+  parseTaskPatch,
+  patchTask,
+  qatarDateKey,
+  taskNotes,
+} from "../schedule";
 import type { SnapshotService } from "../snapshot";
 import { FILES, type Store } from "../store";
 
 // /api/schedule: tasks (notes in the Tasks section), meetings from the calendar connector, and the
-// AI day or week plan. Contract: shared/types.ts "v1.2", API table in docs/ARCHITECTURE.md "v1.2".
+// AI day or week plan. Contract: shared/types.ts "v1.2" and "v1.3", API tables in docs/ARCHITECTURE.md.
 //
 // Mounted by app.ts after its guards (Host, Origin, Sec-Fetch-Site, no-store, 16 KB bodies). Errors
 // are HTTPException 400, 404, 409 or 413 with a plain message; app.ts answers them as ApiError.
@@ -21,8 +31,8 @@ import { FILES, type Store } from "../store";
 // POST   /tasks                            NewTaskInput -> TaskNote (201)
 // PATCH  /tasks?path=<note path>           TaskPatch -> TaskNote
 // GET    /plan                             SchedulePlan
-// POST   /plan                             { scope: "day" | "week" } -> SchedulePlan (waits for the run)
-// POST   /plan/accept                      { ids: string[] } -> { created: TaskNote[] }
+// POST   /plan                             PlanRequest { scope, date? } -> SchedulePlan (waits for the run; no date = today)
+// POST   /plan/accept                      { ids: string[] } -> { created: TaskNote[]; message? } (new and moved tasks)
 // DELETE /plan                             SchedulePlan (status none)
 
 export interface ScheduleRoutesDeps {
@@ -84,11 +94,21 @@ function defaultPlan(deps: ScheduleRoutesDeps): SchedulePlanService {
       { title: item.title, projectId: item.projectId, due: item.date, start: item.start, minutes: item.minutes, details: item.reason },
       "ai",
     );
+  // Moves an existing task to its planned slot; a task deleted since the plan was made reads as null.
+  const moveTask = async (item: PlanItem) => {
+    try {
+      return await patchTask(deps.notes, item.taskPath!, { due: item.date, start: item.start, minutes: item.minutes });
+    } catch (err) {
+      if (err instanceof HTTPException && err.status === 404) return null;
+      throw err;
+    }
+  };
   return createSchedulePlan({
     store: deps.store,
     runDir: deps.store.pathOf(PLAN_RUN_DIR),
     loadData,
     createTask: toTask,
+    patchTask: moveTask,
     runner: deps.planRunner,
     command: resolveClaudeCommand(config.home),
     now: deps.now,
@@ -129,9 +149,13 @@ export function scheduleRoutes(deps: ScheduleRoutesDeps): Hono {
   router.get("/plan", async (c) => c.json(await plan.get()));
 
   router.post("/plan", async (c) => {
-    const scope = (await readObject(c)).scope;
+    const body = await readObject(c);
+    const scope = body.scope;
     if (scope !== "day" && scope !== "week") throw badRequest('scope must be "day" or "week"');
-    return c.json(await plan.run(scope));
+    // No date (a v1.2 client) means today in Asia/Qatar.
+    const date = body.date === undefined || body.date === null ? qatarDateKey(now()) : body.date;
+    if (!isTaskDate(date)) throw badRequest("date must be a date written YYYY-MM-DD");
+    return c.json(await plan.run({ scope, date }));
   });
 
   router.post("/plan/accept", async (c) => {

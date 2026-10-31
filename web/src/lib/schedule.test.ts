@@ -4,6 +4,9 @@ import {
   DAY_END,
   DAY_START,
   MAX_OFFSET_DAYS,
+  acceptCounts,
+  acceptTarget,
+  acceptedPaths,
   buildDay,
   buildWeek,
   dayBounds,
@@ -18,10 +21,16 @@ import {
   itemSpan,
   layoutLanes,
   minutesToPx,
+  movingPaths,
   notPlaced,
   parseHm,
   patchTask,
+  planFrom,
+  planHeading,
   planItems,
+  planItemsIn,
+  planRequestDate,
+  planTitle,
   rangeLabel,
   roundUp,
   stepOffset,
@@ -61,8 +70,9 @@ function task(path: string, due: string | null, start: string | null = null, min
   };
 }
 
-function plan(id: string, date: string, start: string | null, minutes: number | null = 30): PlanItem {
-  return { id, title: id, projectId: null, date, start, minutes, reason: "Fits before lunch." };
+/** A proposal. `start: null` stands for an untimed item from a plan saved before v1.3. */
+function plan(id: string, date: string, start: string | null, minutes: number | null = 30, taskPath: string | null = null): PlanItem {
+  return { id, title: id, projectId: null, date, start: start as string, minutes: minutes as number, reason: "Fits before lunch.", taskPath };
 }
 
 function range(from: string, to: string, days: ScheduleRange["days"], extra: Partial<ScheduleRange> = {}): ScheduleRange {
@@ -122,6 +132,11 @@ describe("days and ranges", () => {
     expect(stepOffset(MAX_OFFSET_DAYS, "day", 1)).toBeNull();
     expect(stepOffset(-MAX_OFFSET_DAYS, "day", -1)).toBeNull();
     expect(stepOffset(-MAX_OFFSET_DAYS, "day", 1)).toBe(-13);
+    // Past the limit (after accepting a plan for a far day) the arrows still step back towards today.
+    expect(stepOffset(20, "day", -1)).toBe(19);
+    expect(stepOffset(20, "day", 1)).toBeNull();
+    expect(stepOffset(-20, "week", 1)).toBe(-13);
+    expect(stepOffset(-20, "week", -1)).toBeNull();
   });
 
   it("names days and ranges", () => {
@@ -284,6 +299,17 @@ describe("buildDay", () => {
     expect(clash.lanes).toBe(2);
   });
 
+  it("keeps ghost blocks on their own day only, with Move: for an existing task", () => {
+    const items = [plan("new", TODAY, "14:00", 30), plan("move", TODAY, "15:00", 45, "Tasks/call.md"), plan("sun", "2026-11-01", "09:00")];
+    const today = buildDay(day, TODAY, items);
+    const ghosts = today.blocks.filter((b) => b.kind === "plan");
+    expect(ghosts.map((b) => b.id)).toEqual(["plan:new", "plan:move"]);
+    expect(ghosts.map((b) => b.title)).toEqual(["new", "Move: move"]);
+    const sunday = buildDay(undefined, "2026-11-01", items);
+    expect(sunday.blocks.map((b) => b.id)).toEqual(["plan:sun"]);
+    expect(buildDay(undefined, "2026-11-02", items).blocks).toEqual([]);
+  });
+
   it("handles a day the range does not have", () => {
     const model = buildDay(undefined, TODAY, []);
     expect(model.blocks).toEqual([]);
@@ -407,6 +433,7 @@ describe("plan", () => {
   const ready: SchedulePlan = {
     status: "ready",
     scope: "day",
+    from: TODAY,
     generatedAt: "2026-10-31T06:00:00.000Z",
     items: [plan("a", TODAY, "10:00"), plan("b", TODAY, "11:00")],
   };
@@ -419,5 +446,63 @@ describe("plan", () => {
 
   it("drops accepted items", () => {
     expect(withoutPlanItems(ready, ["a"]).items.map((i) => i.id)).toEqual(["b"]);
+  });
+
+  it("titles a move and filters proposals to the days shown", () => {
+    expect(planTitle(plan("x", TODAY, "10:00"))).toBe("x");
+    expect(planTitle(plan("Reply to vendor", TODAY, "10:00", 30, "Tasks/reply.md"))).toBe("Move: Reply to vendor");
+    const items = [plan("a", "2026-10-30", "10:00"), plan("b", TODAY, "10:00"), plan("c", "2026-11-06", "10:00"), plan("d", "2026-11-07", "10:00")];
+    expect(planItemsIn(items, TODAY, TODAY).map((i) => i.id)).toEqual(["b"]);
+    expect(planItemsIn(items, TODAY, "2026-11-06").map((i) => i.id)).toEqual(["b", "c"]);
+  });
+
+  it("fades only the tasks that included proposals would move", () => {
+    const items = [plan("a", TODAY, "10:00", 30, "Tasks/a.md"), plan("b", TODAY, "11:00", 30, "Tasks/b.md"), plan("c", TODAY, "12:00")];
+    expect([...movingPaths(items, new Set(["a", "c"]))]).toEqual(["Tasks/a.md"]);
+    expect(movingPaths(items, new Set()).size).toBe(0);
+  });
+
+  it("asks for the day shown, or today on a past day", () => {
+    expect(planRequestDate("2026-11-01", TODAY)).toBe("2026-11-01");
+    expect(planRequestDate(TODAY, TODAY)).toBe(TODAY);
+    expect(planRequestDate("2026-10-29", TODAY)).toBe(TODAY);
+  });
+
+  it("labels the plan with its own date, never today for another day", () => {
+    expect(planHeading({ ...ready, from: TODAY }, TODAY)).toBe("AI plan for today, Sat 31 Oct");
+    expect(planHeading({ ...ready, from: "2026-11-01" }, TODAY)).toBe("AI plan for tomorrow, Sun 1 Nov");
+    expect(planHeading({ ...ready, from: "2026-11-02" }, TODAY)).toBe("AI plan for Mon 2 Nov");
+    expect(planHeading({ ...ready, from: "2026-10-30" }, TODAY)).toBe("AI plan for Fri 30 Oct");
+    expect(planHeading({ ...ready, scope: "week", from: "2026-11-01" }, TODAY)).toBe("AI plan for the week from tomorrow, Sun 1 Nov");
+    expect(planHeading({ ...ready, scope: "week", from: "2026-11-08" }, TODAY)).toBe("AI plan for the week from Sun 8 Nov");
+    // A plan saved before v1.3 has no `from`: its earliest item date stands in.
+    const old = { ...ready, from: null, items: [plan("x", "2026-11-03", "10:00"), plan("y", "2026-11-02", "09:00")] };
+    expect(planFrom(old)).toBe("2026-11-02");
+    expect(planHeading(old, TODAY)).toBe("AI plan for Mon 2 Nov");
+    expect(planHeading({ ...ready, from: null, items: [] }, TODAY)).toBe("AI plan");
+    expect(planFrom({ from: "nonsense", items: [] })).toBeNull();
+  });
+
+  it("shows the plan's day after accept, or the first accepted day when that one was left out", () => {
+    const week: SchedulePlan = {
+      ...ready,
+      scope: "week",
+      from: "2026-11-01",
+      items: [plan("sun", "2026-11-01", "09:00"), plan("tue", "2026-11-03", "10:00"), plan("mon", "2026-11-02", "11:00")],
+    };
+    expect(acceptTarget(week, ["sun", "tue"])).toBe("2026-11-01");
+    expect(acceptTarget(week, ["tue", "mon"])).toBe("2026-11-02");
+    expect(acceptTarget(week, ["gone"])).toBeNull();
+    // Far past the arrows' 14 days: still the plan's day.
+    const far: SchedulePlan = { ...ready, from: "2026-12-01", items: [plan("far", "2026-12-01", "09:00")] };
+    expect(acceptTarget(far, ["far"])).toBe("2026-12-01");
+  });
+
+  it("counts new and moved tasks and highlights both", () => {
+    const items = [plan("n", TODAY, "10:00"), plan("m", TODAY, "11:00", 30, "Tasks/old.md"), plan("x", TODAY, "12:00", 30, "Tasks/other.md")];
+    expect(acceptCounts(items, ["n", "m"])).toEqual({ added: 1, moved: 1 });
+    expect(acceptCounts(items, [])).toEqual({ added: 0, moved: 0 });
+    const created = [task("Tasks/new-n.md", TODAY, "10:00", 30)];
+    expect([...acceptedPaths(created, items, ["n", "m"])].sort()).toEqual(["Tasks/new-n.md", "Tasks/old.md"]);
   });
 });

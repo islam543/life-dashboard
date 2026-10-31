@@ -211,8 +211,14 @@ describe("validateDraftIssues: good input", () => {
         summary: "Send theslip",
         description: "Line one of the description.\n\nLine two here.",
         parent: { kind: "existing", key: "AN-3977" },
+        status: "todo",
       });
     }
+  });
+
+  it("keeps a chosen status when the type allows it, else falls back to the default", () => {
+    const out = check([task({ status: "onhold" }), task({ draftId: "t2", actionIds: ["act-b"], status: "nonsense" })]);
+    expect(out.ok && out.issues.map((i) => i.status)).toEqual(["onhold", "todo"]);
   });
 
   it("counts Arabic summaries in characters", () => {

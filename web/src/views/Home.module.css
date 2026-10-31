@@ -9,7 +9,7 @@
     "kpis"
     "week"
     "bars"
-    "bars30"
+    "donow"
     "heat";
   gap: var(--grid-gap);
 }
@@ -26,7 +26,7 @@
   flex: 1;
 }
 
-/* Needs you, Next moves and Schedule, and the two Time by project panels: a column of their own only
+/* Needs you, Next moves and Schedule, and Time by project with Do now: a column of their own only
    on ultrawide screens (see the end). */
 .act,
 .side {
@@ -68,8 +68,9 @@
   grid-area: bars;
 }
 
-.bars30 {
-  grid-area: bars30;
+/* Do now took the cell of "Time by project, last 30 days" (T32) at every size. */
+.donow {
+  grid-area: donow;
 }
 
 .heat {
@@ -85,7 +86,7 @@
       "needs needs"
       "moves kpis"
       "moves bars"
-      "moves bars30"
+      "moves donow"
       "sched sched"
       "week  week"
       "heat  heat";
@@ -106,7 +107,7 @@
       "needs needs needs needs needs needs needs needs needs needs needs needs"
       "moves moves moves moves moves kpis  kpis  kpis  kpis  kpis  kpis  kpis"
       "moves moves moves moves moves bars  bars  bars  bars  bars  bars  bars"
-      "moves moves moves moves moves bars30 bars30 bars30 bars30 bars30 bars30 bars30"
+      "moves moves moves moves moves donow donow donow donow donow donow donow"
       "sched sched sched sched sched sched sched sched sched sched sched sched"
       "week  week  week  week  week  week  week  week  week  week  week  week"
       "heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat";
@@ -117,8 +118,8 @@
    Three columns read left to right by urgency:
      left 30%    act now: Needs you, Next moves, then Schedule, each scrolling inside itself
      centre 47%  the numbers: key numbers, this week, the last 52 weeks
-     right 23%   where the time went: project bars for the week or month on top, the last 30 days
-                 under it (8 projects plus Other each; a panel scrolls inside if it runs short)
+     right 23%   time and tasks: project bars for the week or month on top (8 projects plus Other),
+                 Do now under it with the larger share; each scrolls inside if it runs short
    Ratios: the bars never need more than about 540px of width, while Next moves titles and reasons
    wrap less with every extra pixel, so the right column gives 2% to the left. The centre stays at 47%:
    any wider and the year grid's cells grow taller and This week would have to scroll at 940px high.
@@ -172,7 +173,8 @@
     min-height: 0;
   }
 
-  /* The two Time by project panels share the right column evenly; each scrolls inside if it runs short. */
+  /* Time by project on top (about 40%) and Do now under it (about 60%): the open task's steps need
+     the height, the bars stay readable at 8 rows and scroll inside when short. */
   .side {
     grid-area: side;
     display: flex;
@@ -181,9 +183,13 @@
     min-height: 0;
   }
 
-  .bars,
-  .bars30 {
-    flex: 1 1 0;
+  .bars {
+    flex: 2 1 0;
+    min-height: 0;
+  }
+
+  .donow {
+    flex: 3 1 0;
     min-height: 0;
   }
 }

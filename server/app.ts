@@ -11,6 +11,7 @@ import type { MoveState } from "./ai/nextMoves";
 import { validateCheckin } from "./checkinValidate";
 import { config, PORT, WEB_DEV_PORT } from "./config";
 import { createNotesStore, type NotesStore } from "./notes";
+import { focusRoutes } from "./routes/focus";
 import { jiraRoutes } from "./routes/jira";
 import { notesRoutes } from "./routes/notes";
 import { projectsRoutes } from "./routes/projects";
@@ -193,10 +194,17 @@ export function createApp(deps: AppDeps): Hono {
   app.route("/api/notes", notesRoutes({ notes, snapshots, now, log }));
   // v1.2 routers (tickets T27, T28): same guards, same shared notes store.
   app.route("/api/schedule", scheduleRoutes({ notes, store, snapshots, now, log }));
+  app.route("/api/focus", focusRoutes({ notes, store, snapshots, now, log }));
   app.route("/api/jira", jiraRoutes({ notes, store, snapshots, now, log }));
 
   const dist = deps.webDistDir ? path.resolve(deps.webDistDir) : null;
   if (dist && existsSync(path.join(dist, "index.html"))) {
+    // The page itself is re-checked on every load, so a rebuild shows at once; the hashed files in
+    // /assets never change under the same name and stay cached.
+    app.use("/*", async (c, next) => {
+      await next();
+      if (!c.req.path.startsWith("/api/") && !c.req.path.startsWith("/assets/")) c.header("Cache-Control", "no-cache");
+    });
     app.use("/*", serveStatic({ root: dist }));
   } else {
     app.get("/", (c) =>

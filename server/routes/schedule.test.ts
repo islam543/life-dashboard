@@ -230,10 +230,12 @@ describe("plan routes", () => {
       generatedAt: NOW.toISOString(), status: "ok",
       moves: [{ id: "m", title: "Review PR #42", reason: "Waiting", area: "work", rank: 1, state: "open" }],
     });
-    expect(await ok200<SchedulePlan>(await app.request("/api/schedule/plan"))).toEqual({ status: "none", scope: null, generatedAt: null, items: [] });
+    expect(await ok200<SchedulePlan>(await app.request("/api/schedule/plan"))).toEqual({ status: "none", scope: null, from: null, generatedAt: null, items: [] });
     answer = ok(JSON.stringify(ITEMS));
+    // No date (a v1.2 client): today in Doha.
     const plan = await ok200<SchedulePlan>(await send("POST", "/api/schedule/plan", { scope: "day" }));
     expect(plan.status).toBe("ready");
+    expect(plan.from).toBe("2026-11-01");
     expect(plan.items.map((i) => i.title)).toEqual(["Write the UAT plan", "Clear the inbox"]);
     expect(runs).toHaveLength(1);
     expect(runs[0]!.cwd).toBe(store.pathOf("schedule-run"));
@@ -268,8 +270,78 @@ describe("plan routes", () => {
     expect(left.items.map((i) => i.title)).toEqual(["Clear the inbox"]);
 
     const cleared = await ok200<SchedulePlan>(await send("DELETE", "/api/schedule/plan"));
-    expect(cleared).toEqual({ status: "none", scope: null, generatedAt: null, items: [] });
+    expect(cleared).toEqual({ status: "none", scope: null, from: null, generatedAt: null, items: [] });
     expect(await store.read(PLAN_FILE, null)).toEqual(cleared);
+  });
+
+  it("plans the date the panel shows, a Saturday included, and from is that date", async () => {
+    answer = ok(JSON.stringify([{ title: "Read the RAG chapter", date: "2026-11-07", minutes: 45, projectId: null, reason: "Learning" }]));
+    const plan = await ok200<SchedulePlan>(await send("POST", "/api/schedule/plan", { scope: "day", date: "2026-11-07" }));
+    expect(runs[0]!.args[1]).toContain("Plan one day: 2026-11-07 (Saturday).");
+    expect(plan).toMatchObject({ status: "ready", scope: "day", from: "2026-11-07" });
+    // The model left the start out: the placer gave it the first free slot of the window.
+    expect(plan.items).toMatchObject([{ date: "2026-11-07", start: "07:00", minutes: 45, taskPath: null }]);
+  });
+
+  it("today: nothing starts before now rounded up to 15 minutes", async () => {
+    answer = ok(JSON.stringify([{ title: "Early", date: "2026-11-01", start: "07:30", minutes: 30, projectId: null, reason: "r" }]));
+    const plan = await ok200<SchedulePlan>(await send("POST", "/api/schedule/plan", { scope: "day", date: "2026-11-01" }));
+    expect(runs[0]!.args[1]).toContain("nothing may start before 09:00");
+    expect(plan.items.map((i) => i.start)).toEqual(["09:00"]);
+  });
+
+  it("accept PATCHes an existing task into its slot and creates new notes for the rest", async () => {
+    const slip = await ok200<TaskNote>(await send("POST", "/api/schedule/tasks", { title: "Send slip", projectId: "qic-fastbind" }), 201);
+    answer = ok(
+      JSON.stringify([
+        { title: "Send it", date: "2026-11-01", start: "14:00", minutes: 20, projectId: null, taskPath: slip.path, reason: "Undated task" },
+        { title: "Clear the inbox", date: "2026-11-01", start: "15:00", minutes: 30, projectId: null, taskPath: null, reason: "Next move" },
+      ]),
+    );
+    const plan = await ok200<SchedulePlan>(await send("POST", "/api/schedule/plan", { scope: "day", date: "2026-11-01" }));
+    expect(runs[0]!.args[1]).toContain(`"path":"${slip.path}"`);
+    expect(plan.items.map((i) => [i.title, i.taskPath])).toEqual([
+      ["Send slip", slip.path],
+      ["Clear the inbox", null],
+    ]);
+    refreshLocal.mockClear();
+    const result = await ok200<{ created: TaskNote[]; message?: string }>(
+      await send("POST", "/api/schedule/plan/accept", { ids: plan.items.map((i) => i.id) }),
+    );
+    expect(result.message).toBeUndefined();
+    expect(result.created.map((t) => [t.path, t.task.due, t.task.start, t.task.minutes, t.task.source])).toEqual([
+      [slip.path, "2026-11-01", "14:00", 20, "me"],
+      ["Tasks/clear-the-inbox.md", "2026-11-01", "15:00", 30, "ai"],
+    ]);
+    const text = await fileText(slip.path);
+    expect(text).toContain('task_due: 2026-11-01\ntask_start: "14:00"\ntask_minutes: 20\n');
+    expect(text).toContain("project: qic-fastbind\n");
+    const index = await ok200<NotesIndex>(await app.request("/api/notes"));
+    expect(index.notes.filter((n) => n.section === "Tasks").map((n) => n.path).sort()).toEqual(["Tasks/clear-the-inbox.md", slip.path]);
+    expect(refreshLocal).toHaveBeenCalledTimes(1);
+    const range = await ok200<ScheduleRange>(await app.request("/api/schedule?from=2026-11-01&to=2026-11-01"));
+    expect(range.days[0]!.tasks.map((t) => [t.title, t.task.start])).toEqual([
+      ["Send slip", "14:00"],
+      ["Clear the inbox", "15:00"],
+    ]);
+  });
+
+  it("accept skips a task deleted since the plan was made, with a message", async () => {
+    const slip = await ok200<TaskNote>(await send("POST", "/api/schedule/tasks", { title: "Send slip" }), 201);
+    answer = ok(JSON.stringify([{ title: "Send it", date: "2026-11-01", start: "14:00", minutes: 20, projectId: null, taskPath: slip.path, reason: "r" }]));
+    const plan = await ok200<SchedulePlan>(await send("POST", "/api/schedule/plan", { scope: "day", date: "2026-11-01" }));
+    await rm(path.join(dir, "Tasks", "send-slip.md"));
+    const result = await ok200<{ created: TaskNote[]; message?: string }>(await send("POST", "/api/schedule/plan/accept", { ids: [plan.items[0]!.id] }));
+    expect(result).toEqual({ created: [], message: "1 task no longer exists and was skipped." });
+    expect((await ok200<SchedulePlan>(await app.request("/api/schedule/plan"))).items).toEqual([]);
+  });
+
+  it("refuses a bad or past date with 400 and runs nothing", async () => {
+    await fails(await send("POST", "/api/schedule/plan", { scope: "day", date: "2026-11-31" }), 400, /date/);
+    await fails(await send("POST", "/api/schedule/plan", { scope: "day", date: "tomorrow" }), 400, /date/);
+    await fails(await send("POST", "/api/schedule/plan", { scope: "week", date: 20261101 }), 400, /date/);
+    await fails(await send("POST", "/api/schedule/plan", { scope: "day", date: "2026-10-31" }), 400, /past/);
+    expect(runs).toHaveLength(0);
   });
 
   it("refuses a bad scope or bad ids with 400", async () => {

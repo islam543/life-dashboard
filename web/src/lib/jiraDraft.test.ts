@@ -293,3 +293,37 @@ describe("errors and timing", () => {
     expect(elapsedText(65_000)).toBe("1 min 05 s");
   });
 });
+
+describe("status picker", async () => {
+  const { STATUS_OPTIONS, statusOf, toReview, createPayload, editIssue } = await import("./jiraDraft");
+  const draft = {
+    notePath: "Meeting notes/a.md",
+    createdAt: "2026-10-31T10:00:00Z",
+    epics: [],
+    issues: [
+      { draftId: "e1", actionIds: [], type: "Epic" as const, summary: "Reinsurance ledger", description: "Everything for the ledger export.", parent: null },
+      { draftId: "t1", actionIds: ["a1"], type: "Task" as const, summary: "Collect files", description: "Ask the team for the files.", parent: { kind: "new" as const, draftId: "e1" } },
+    ],
+  };
+
+  it("offers five statuses for Tasks and two for Epics", () => {
+    expect(STATUS_OPTIONS.Task.map((o) => o.label)).toEqual(["To Do", "In Progress", "On hold", "Done", "Backlog"]);
+    expect(STATUS_OPTIONS.Epic.map((o) => o.label)).toEqual(["Backlog", "In Progress"]);
+  });
+
+  it("defaults Tasks to To Do and Epics to Backlog, and drops statuses a type cannot take", () => {
+    const review = toReview(draft);
+    expect(review.issues.map((i) => i.status)).toEqual(["backlog", "todo"]);
+    expect(statusOf({ type: "Epic", status: "done" })).toBe("backlog");
+  });
+
+  it("sends the chosen status with each issue", () => {
+    let review = toReview(draft);
+    review = editIssue(review, "t1", { status: "onhold" });
+    review = editIssue(review, "e1", { status: "inprogress" });
+    expect(createPayload(review).map((i) => [i.draftId, i.status])).toEqual([
+      ["e1", "inprogress"],
+      ["t1", "onhold"],
+    ]);
+  });
+});

@@ -15,6 +15,8 @@ import {
   parentValue,
   parseParentValue,
   setEpicTasksIncluded,
+  STATUS_OPTIONS,
+  statusOf,
   SUMMARY_MAX,
   type EpicGroup,
   type IssueEdit,
@@ -120,6 +122,38 @@ function ParentSelect({
   );
 }
 
+/** The status the issue is created in. Tasks: To Do, In Progress, On hold, Done, Backlog. Epics: Backlog or In Progress. */
+function StatusSelect({
+  id,
+  issue,
+  onChange,
+}: {
+  id: string;
+  issue: Pick<ReviewIssue, "type" | "status">;
+  onChange: (value: ReviewIssue["status"]) => void;
+}) {
+  const options = STATUS_OPTIONS[issue.type];
+  return (
+    <select
+      id={id}
+      className={styles.input}
+      value={statusOf(issue)}
+      onChange={(e) => onChange(e.target.value as ReviewIssue["status"])}
+      data-tip={
+        issue.type === "Task"
+          ? "Sets the column the task lands in on the AN board when it is created."
+          : "New epics start in Backlog; pick In Progress if the work has already started."
+      }
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function TaskCard({
   task,
   problems,
@@ -142,6 +176,7 @@ function TaskCard({
     descriptionError: `t-desc-e-${uid}`,
     epic: `t-epic-${uid}`,
     epicError: `t-epic-e-${uid}`,
+    status: `t-status-${uid}`,
     covers: `t-cov-${uid}`,
   };
   const p = task.include ? problems : undefined;
@@ -227,6 +262,12 @@ function TaskCard({
       </div>
 
       <div className={styles.taskSide}>
+        <div className={styles.field}>
+          <label htmlFor={ids.status} className={styles.label}>
+            Status
+          </label>
+          <StatusSelect id={ids.status} issue={task} onChange={(status) => onEdit({ status })} />
+        </div>
         <div className={styles.field}>
           <label htmlFor={ids.epic} className={styles.label}>
             Epic
@@ -348,6 +389,11 @@ function GroupHead({
           aria-describedby={p?.summary ? titleErrorId : undefined}
           onChange={(e) => onEdit(epic.draftId, { summary: e.target.value.replace(/[\r\n]+/g, " ") })}
           data-tip="Renames the new epic; it is created first and its tasks go under it."
+        />
+        <StatusSelect
+          id={`epic-status-${uid}`}
+          issue={epic}
+          onChange={(status) => onEdit(epic.draftId, { status })}
         />
         <button
           type="button"

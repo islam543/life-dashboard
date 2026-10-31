@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { DoNowPanel } from "../panels/DoNowPanel";
 import { KpiTiles } from "../panels/KpiTiles";
 import { NeedsYouStrip } from "../panels/NeedsYouStrip";
 import { NextMovesPanel } from "../panels/NextMovesPanel";
@@ -15,8 +16,9 @@ import styles from "./Home.module.css";
 // `act` holds Needs you, Next moves and Schedule. Below 1920px it is display: contents, so all three
 // stay plain grid cells and Schedule comes straight after Next moves. On ultrawide screens it is the
 // left column: one stack whose three panels share the screen height and scroll inside themselves.
-// `side` does the same on the right for the two Time by project panels (this week or month, then the
-// last 30 days), which split the height evenly. The DOM order is the same at every size.
+// `side` does the same on the right for Time by project (this week or month) and Do now under it
+// (the tasks to do now, with AI steps), which takes the larger share. The DOM order is the same at
+// every size.
 
 const order = (i: number) => ({ "--i": i }) as CSSProperties;
 
@@ -44,8 +46,8 @@ export function Home() {
         <div className={`${styles.cell} ${styles.bars}`} style={order(5)}>
           <ProjectTimeBars />
         </div>
-        <div className={`${styles.cell} ${styles.bars30}`} style={order(6)}>
-          <ProjectTimeBars fixedRange="last30" />
+        <div className={`${styles.cell} ${styles.donow}`} style={order(6)}>
+          <DoNowPanel />
         </div>
       </div>
       <div className={`${styles.cell} ${styles.heat}`} style={order(7)}>

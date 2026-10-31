@@ -147,6 +147,25 @@
   overflow-wrap: anywhere;
 }
 
+/* What the server skipped on Accept: amber, not red, since the rest of the plan landed. */
+.acceptNote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border: var(--hairline) solid var(--warn-line);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.acceptNote p {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .inlineProblem {
   display: grid;
   justify-items: start;
@@ -370,6 +389,45 @@
 
 .off {
   opacity: 0.45;
+}
+
+/* A task an included proposal would move: its current slot fades and its edge turns dashed violet,
+   so the old and the proposed place read as one move. */
+.moving {
+  opacity: 0.45;
+}
+
+.block.moving {
+  border-style: dashed;
+  border-color: var(--ai-line);
+}
+
+.taskRow.moving,
+.weekRow.moving {
+  outline: var(--hairline) dashed var(--ai-line);
+  outline-offset: -1px;
+}
+
+/* Just placed by Accept: one violet pulse, under a second. Ends on the normal look, so with reduced
+   motion (global.css cuts every animation to nothing) there is no highlight at all. */
+.flash {
+  animation: landed 900ms var(--ease-out) 1 both;
+}
+
+@keyframes landed {
+  0% {
+    box-shadow:
+      0 0 0 2px var(--ai),
+      var(--glow-ai);
+  }
+  60% {
+    box-shadow:
+      0 0 0 2px var(--ai-line),
+      var(--glow-ai);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .blockText {
@@ -638,6 +696,16 @@
 
 .planHint {
   color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* The plan sits on a day the panel isn't showing: say so, with a way there. */
+.planJump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  color: var(--text);
   font-size: var(--fs-sm);
 }
 

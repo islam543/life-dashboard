@@ -83,6 +83,7 @@ function defaultSettings(): JiraRunSettings {
     site: jiraSites(config.jira.site)[0]!,
     accountId: config.jira.accountId,
     projectKey: config.jira.projectKey,
+    product: config.jira.product,
     draftTimeoutMs: DRAFT_TIMEOUT_MS,
     createTimeoutMs: CREATE_TIMEOUT_MS,
   };

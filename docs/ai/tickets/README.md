@@ -34,6 +34,8 @@ Open backlog = files at this level. Finished tickets move to `done/`. Plan: `../
 | T28 | Jira server: actions, AI draft, create, write-back | backend-developer | contract | 10 | done |
 | T29 | Home Schedule panel | frontend-developer | contract | 10 | done |
 | T30 | Notes task bar, detected actions, Jira review | frontend-developer | contract | 10 | done |
+| T31 | Server: plan placement fix, Do now API and steps | backend-developer | v1.3 contract | 11 | done |
+| T32 | Web: plan placement in Schedule, Do now panel | frontend-developer | v1.3 contract | 11 | done |
 
 ## Assumptions taken (say if any is wrong)
 

@@ -98,17 +98,32 @@ export interface NewTaskInput { title: string; projectId: string | null; due: st
   minutes: number | null; details?: string }
 export interface TaskPatch { title?: string; projectId?: string | null; due?: string | null; start?: string | null;
   minutes?: number | null; done?: boolean }
-export interface PlanItem { id: string; title: string; projectId: string | null; date: string; start: string | null;
-  minutes: number | null; reason: string }
+export interface PlanItem { id: string; title: string; projectId: string | null; date: string;
+  start: string;                                   // v1.3: always set; the server places items the model left untimed
+  minutes: number; reason: string;
+  taskPath: string | null }                        // v1.3: an existing task to move; null = a new task
 export interface SchedulePlan { status: "none" | "ready" | "error"; scope: "day" | "week" | null;
+  from: string | null;                             // v1.3: first planned date (the day the panel showed)
   generatedAt: string | null; message?: string; items: PlanItem[] }
+export interface PlanRequest { scope: "day" | "week"; date: string }   // v1.3: date = the day the panel shows, YYYY-MM-DD
+
+// v1.3: Do now (Home, bottom right): the tasks that need doing now, each with AI how-to steps.
+export type FocusReason = "now" | "next" | "overdue" | "today";   // in this block / later today / past due / today, no time
+export interface FocusItem { task: TaskNote; reason: FocusReason;
+  label: string;                                   // "Now until 15:30", "Next at 16:00", "Overdue since Thu 29 Oct", "Today, no time set"
+  projectName: string | null; jiraKey: string | null;
+  steps: string[] | null;                          // null = not generated yet
+  stepsStatus: "ready" | "pending" | "error"; stepsMessage?: string }
+export interface FocusState { generatedAt: string; items: FocusItem[] }   // at most 6, most urgent first
 
 export interface DetectedAction { id: string; text: string; line: number;   // line = 1-based line in the note body
   done: boolean; jiraKey: string | null }                                     // jiraKey = an AN-123 already on the line
 export interface JiraEpicRef { key: string; summary: string }
 export type JiraParent = { kind: "existing"; key: string } | { kind: "new"; draftId: string } | null;
 export interface JiraDraftIssue { draftId: string; actionIds: string[]; type: "Task" | "Epic";
-  summary: string; description: string; parent: JiraParent }   // Tasks only: an existing epic of mine, or a new Epic in this draft
+  summary: string; description: string; parent: JiraParent;    // Tasks only: an existing epic of mine, or a new Epic in this draft
+  status?: JiraStatusChoice }   // v1.3: status at creation. Tasks: any; Epics: backlog or inprogress. Missing: Task todo, Epic backlog
+export type JiraStatusChoice = "backlog" | "todo" | "inprogress" | "onhold" | "done";
 export interface JiraDraft { notePath: string; createdAt: string; epics: JiraEpicRef[]; issues: JiraDraftIssue[] }
 export interface JiraCreated { draftId: string; key: string; url: string; type: "Task" | "Epic" }
 export interface JiraCreateResult { created: JiraCreated[]; failed: { draftId: string; error: string }[] }

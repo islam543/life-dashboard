@@ -6,6 +6,7 @@ import type {
   JiraDraftIssue,
   JiraEpicRef,
   JiraParent,
+  JiraStatusChoice,
 } from "../../../shared/types";
 
 // Pure helpers behind the Notes "Detected actions" section and the Jira review dialog (T30):
@@ -105,15 +106,39 @@ export interface ReviewDraft {
   issues: ReviewIssue[];
 }
 
+/**
+ * Statuses an issue can be created in, as the picker lists them (mirrors the server). Epics use
+ * another AN workflow and can only start in Backlog or In Progress.
+ */
+export const STATUS_OPTIONS: Readonly<Record<"Task" | "Epic", readonly { value: JiraStatusChoice; label: string }[]>> = {
+  Task: [
+    { value: "todo", label: "To Do" },
+    { value: "inprogress", label: "In Progress" },
+    { value: "onhold", label: "On hold" },
+    { value: "done", label: "Done" },
+    { value: "backlog", label: "Backlog" },
+  ],
+  Epic: [
+    { value: "backlog", label: "Backlog" },
+    { value: "inprogress", label: "In Progress" },
+  ],
+};
+
+/** The issue's status if its type allows it, else the default: To Do for Tasks, Backlog for Epics. */
+export function statusOf(issue: Pick<JiraDraftIssue, "type" | "status">): JiraStatusChoice {
+  const allowed = STATUS_OPTIONS[issue.type].map((o) => o.value);
+  return issue.status && allowed.includes(issue.status) ? issue.status : issue.type === "Task" ? "todo" : "backlog";
+}
+
 export function toReview(draft: JiraDraft): ReviewDraft {
   return {
     notePath: draft.notePath,
     epics: draft.epics.map((e) => ({ key: e.key, summary: e.summary })),
-    issues: draft.issues.map((i) => ({ ...i, actionIds: [...i.actionIds], include: true })),
+    issues: draft.issues.map((i) => ({ ...i, actionIds: [...i.actionIds], status: statusOf(i), include: true })),
   };
 }
 
-export type IssueEdit = Partial<Pick<ReviewIssue, "summary" | "description" | "include" | "parent">>;
+export type IssueEdit = Partial<Pick<ReviewIssue, "summary" | "description" | "include" | "parent" | "status">>;
 
 /** A copy of the draft with one issue changed. */
 export function editIssue(review: ReviewDraft, draftId: string, edit: IssueEdit): ReviewDraft {
@@ -252,6 +277,7 @@ function toPayload(i: ReviewIssue): JiraDraftIssue {
     summary: i.summary.trim(),
     description: i.description.trim(),
     parent: i.type === "Epic" ? null : i.parent,
+    status: statusOf(i),
   };
 }
 

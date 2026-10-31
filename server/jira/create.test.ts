@@ -252,3 +252,52 @@ describe("createIssues", () => {
     expect(out.result.failed).toEqual([{ draftId: "t2", error: "Could not start claude (RUN_FAILED)." }]);
   });
 });
+
+describe("Product field (AN requires customfield_11461)", () => {
+  const product = { field: "customfield_11461", workspaceId: "141cbb86-962b-4bb8-8f49-676bb76f7433", objectId: "948" };
+  const task = { draftId: "t1", actionIds: ["a1"], type: "Task" as const, summary: "Collect the treaty files", description: "Ask the reinsurance team for the files.", parent: { kind: "existing" as const, key: "AN-3977" } };
+  const epic = { draftId: "e1", actionIds: [], type: "Epic" as const, summary: "Reinsurance ledger", description: "Everything about the reinsurance ledger export.", parent: null };
+
+  it("puts the Assets reference on every Task and Epic, in the shape Jira stores it", () => {
+    for (const issue of [task, epic]) {
+      const built = buildPayload(issue, { site: "s", accountId: "a", projectKey: "AN", product }, new Map());
+      expect(built.ok && built.payload.additional_fields).toEqual({
+        customfield_11461: [{ workspaceId: product.workspaceId, id: `${product.workspaceId}:948`, objectId: "948" }],
+      });
+    }
+  });
+
+  it("the create prompt passes it through as payload data", () => {
+    const built = buildPayload(task, { site: "s", accountId: "a", projectKey: "AN", product }, new Map());
+    const prompt = buildCreatePrompt(built.ok ? [built.payload] : []);
+    expect(prompt).toContain('"customfield_11461"');
+    expect(prompt).toContain(`"id": "${product.workspaceId}:948"`);
+  });
+});
+
+describe("status at creation", () => {
+  const settings = { site: "s", accountId: "a", projectKey: "AN" };
+  const base = { draftId: "t1", actionIds: ["a1"], summary: "Collect the treaty files", description: "Ask the reinsurance team for the files.", parent: null };
+
+  it("maps each Task status to its AN workflow transition", () => {
+    const want = { todo: "61", inprogress: "31", onhold: "81", done: "41", backlog: "11" } as const;
+    for (const [status, id] of Object.entries(want)) {
+      const built = buildPayload({ ...base, type: "Task", status: status as keyof typeof want }, settings, new Map());
+      expect(built.ok && built.payload.transition).toEqual({ id });
+    }
+  });
+
+  it("defaults a Task to To Do and an Epic to Backlog (no transition)", () => {
+    const task = buildPayload({ ...base, type: "Task" }, settings, new Map());
+    expect(task.ok && task.payload.transition).toEqual({ id: "61" });
+    const epic = buildPayload({ ...base, draftId: "e1", actionIds: [], type: "Epic" }, settings, new Map());
+    expect(epic.ok && epic.payload.transition).toBeUndefined();
+  });
+
+  it("lets an Epic start In Progress, and ignores statuses an Epic cannot take", () => {
+    const go = buildPayload({ ...base, draftId: "e1", actionIds: [], type: "Epic", status: "inprogress" }, settings, new Map());
+    expect(go.ok && go.payload.transition).toEqual({ id: "21" });
+    const done = buildPayload({ ...base, draftId: "e1", actionIds: [], type: "Epic", status: "done" }, settings, new Map());
+    expect(done.ok && done.payload.transition).toBeUndefined();
+  });
+});

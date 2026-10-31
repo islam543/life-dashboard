@@ -28,6 +28,12 @@ export interface JiraConfig {
   accountId: string;
   /** JIRA_PROJECT_KEY: the only project issues are created in (ticket T28). Plain config, not a secret. */
   projectKey: string;
+  /**
+   * The AN project's required "Product" field, an Assets object reference. Every created issue gets
+   * it. Default: "Internal service / process" (object 948), the value on most AN tasks and epics.
+   * JIRA_PRODUCT_FIELD, JIRA_PRODUCT_WORKSPACE, JIRA_PRODUCT_OBJECT override it.
+   */
+  product: { field: string; workspaceId: string; objectId: string };
 }
 
 /** The Claude connector run (ticket T26). No secrets here: the connectors use the claude.ai login. */
@@ -70,11 +76,23 @@ export type EnvSource = Record<string, string | undefined>;
 export const DEFAULT_JIRA_SITE = "qicbizdev.atlassian.net";
 export const DEFAULT_JIRA_ACCOUNT_ID = "712020:e1e9b601-f708-4c43-84a3-789ac7ef493b";
 export const DEFAULT_JIRA_PROJECT_KEY = "AN";
+/** AN's Product field: "Internal service / process" in the qicbizdev Assets workspace (checked 2026-10-31). */
+export const DEFAULT_JIRA_PRODUCT = {
+  field: "customfield_11461",
+  workspaceId: "141cbb86-962b-4bb8-8f49-676bb76f7433",
+  objectId: "948",
+} as const;
 
 function clean(value: string | undefined): string | null {
   if (value === undefined) return null;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+/** An env value when it matches `shape`, else `fallback`. */
+function pick(value: string | undefined, shape: RegExp, fallback: string): string {
+  const text = clean(value);
+  return text !== null && shape.test(text) ? text : fallback;
 }
 
 /** A whole number of minutes from env, or `fallback` when missing or not a positive number. */
@@ -109,6 +127,11 @@ export function loadConfig(env: EnvSource, opts: { rootDir?: string; home?: stri
     site: clean(env.JIRA_SITE) ?? DEFAULT_JIRA_SITE,
     accountId: accountId && /^[A-Za-z0-9:_-]{1,128}$/.test(accountId) ? accountId : DEFAULT_JIRA_ACCOUNT_ID,
     projectKey: projectKey && /^[A-Z][A-Z0-9]{1,9}$/.test(projectKey) ? projectKey : DEFAULT_JIRA_PROJECT_KEY,
+    product: {
+      field: pick(env.JIRA_PRODUCT_FIELD, /^customfield_\d{1,8}$/, DEFAULT_JIRA_PRODUCT.field),
+      workspaceId: pick(env.JIRA_PRODUCT_WORKSPACE, /^[0-9a-f-]{36}$/, DEFAULT_JIRA_PRODUCT.workspaceId),
+      objectId: pick(env.JIRA_PRODUCT_OBJECT, /^\d{1,10}$/, DEFAULT_JIRA_PRODUCT.objectId),
+    },
   } as JiraConfig;
   Object.defineProperty(jira, "email", { value: clean(env.JIRA_EMAIL), enumerable: false });
   Object.defineProperty(jira, "apiToken", { value: clean(env.JIRA_API_TOKEN), enumerable: false });

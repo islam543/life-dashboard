@@ -339,3 +339,40 @@ assigned to or reported by me, not Done), else under a new Epic. Not written to 
   reporter is Islam because the connector acts as him. Returned keys must match `^AN-\d+$`.
 - **Write-back**: each created key is appended to its action lines in the note (`- [ ] Send slip (AN-4602)`),
   through the notes store with the usual conflict check, so the same action is never filed twice.
+
+## v1.3: Plan placement fix and the Do now panel
+
+Requests (Islam, 2026-10-31): accepting an AI plan must put each task on the timeline automatically;
+the bottom-right "Time by project, last 30 days" panel is replaced by **Do now**: the tasks to do now,
+each with a step-by-step how-to written by AI. Time by project (week/month bars) stays above it.
+
+### Plan placement (fixes v1.2)
+- `POST /api/schedule/plan` takes `PlanRequest { scope, date }`. `date` is the day the panel shows. "day" plans
+  that date; "week" plans 7 days from it. Weekends are allowed. For today, nothing starts before now
+  (rounded up to the next 15 minutes). Window 07:00 to 22:00; the prompt asks to keep work tasks inside
+  08:00 to 18:00 on Sunday to Thursday, and personal or learning tasks may use evenings and weekends.
+- The plan also places **existing open tasks** that have no start, no due date, or are overdue: those
+  items carry `taskPath`. Accept PATCHes them (due, start, minutes); items with `taskPath: null` create new
+  task notes as before. A taskPath must be one of the open tasks given to the run.
+- Every item leaves the server with a start and minutes. Items the model left untimed, or that overlap a
+  meeting or another timed task, are moved by a pure placer into the first free gap of that day that fits
+  (else the next day in scope); items that fit nowhere are dropped with a note in `message`.
+- `SchedulePlan.from` = the first planned date. The panel labels the plan with the real date ("AI plan for
+  Sun 1 Nov") and, after Accept, switches to the plan's first date in Day view so the blocks are visible.
+
+### Do now
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/focus` | | `FocusState` (cached steps only, never waits for AI) |
+| POST | `/api/focus/steps` | `{ path, force?: boolean }` | `FocusItem` (waits for the AI run for that task) |
+
+- Items (at most 6), from open task notes: the task whose block contains now ("now"), the next timed tasks
+  today ("next"), overdue tasks ("overdue", oldest first), today's untimed tasks ("today"). If none, an empty
+  list (the panel then offers the top Next move and the Plan my day button).
+- Steps: 3 to 7 short imperative lines, concrete to the task, from a `claude -p` run with **no tools**
+  (same hardening as the plan run). Input: the task title and body, its project (name, description, goals,
+  open project tasks), and the Jira issue summary and status when the title or body holds an AN key known
+  to the connector cache. Note, project and Jira text are untrusted data in the prompt.
+- Cache: `data/taskSteps.json`, keyed by task path plus the note's `updated` time, so editing the task
+  regenerates. After GET, the server fills missing steps for the top 3 items in the background, in one
+  batched run (single-flight); GET returns `stepsStatus: "pending"` meanwhile. `force` regenerates one.
