@@ -86,6 +86,12 @@
   --cat-5: #6e86b5;
   --cat-6: #c9f3fa;
 
+  /* Animated backdrop (ui/Backdrop.tsx). Panels let a little of it through. */
+  --aurora-opacity: 0.16;
+  --surface-alpha: 86%;
+  --panel-top: color-mix(in srgb, var(--bg-surface-top) var(--surface-alpha), transparent);
+  --panel-fill: color-mix(in srgb, var(--bg-surface) var(--surface-alpha), transparent);
+
   /* Skeleton */
   --skeleton-base: rgba(125, 211, 252, 0.06);
   --skeleton-shine: rgba(125, 211, 252, 0.12);
@@ -234,6 +240,11 @@
   --cat-4: #6b8fd6;
   --cat-5: #5d6f92;
   --cat-6: #7fc6d6;
+
+  --aurora-opacity: 0.1;
+  --surface-alpha: 88%;
+  --panel-top: color-mix(in srgb, var(--bg-surface-top) var(--surface-alpha), transparent);
+  --panel-fill: color-mix(in srgb, var(--bg-surface) var(--surface-alpha), transparent);
 
   --skeleton-base: rgba(20, 50, 100, 0.06);
   --skeleton-shine: rgba(20, 50, 100, 0.12);

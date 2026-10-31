@@ -309,7 +309,8 @@ describe("validate", () => {
 
   it("guards NextMove[] without state", () => {
     expect(validateProposedMoves({ moves: [] }).ok).toBe(false);
-    expect(validateProposedMoves([{ ...MOVES[0], rank: "1" }]).ok).toBe(false);
+    // A rank written as text is read, not a reason to drop every move (see rank.test.ts).
+    expect(validateProposedMoves([{ ...MOVES[0], rank: "1" }])).toEqual({ ok: true, moves: [{ ...MOVES[0], rank: 1 }] });
     expect(validateProposedMoves([{ ...MOVES[0], sourceUrl: 5 }]).ok).toBe(false);
     expect(validateProposedMoves([{ ...MOVES[0], id: "" }]).ok).toBe(false);
     const check = validateProposedMoves([{ ...MOVES[0], extra: "dropped", title: "  two\n lines  " }]);

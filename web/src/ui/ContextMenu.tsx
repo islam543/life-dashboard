@@ -4,6 +4,7 @@ import { useCheckin } from "../context/CheckinContext";
 import { useSnapshot } from "../hooks/useSnapshot";
 import { cleanSections, nextEnabled, placeMenu, type CleanSection, type MenuAction, type MenuSection } from "../lib/contextMenu";
 import { setTheme, useTheme } from "../lib/theme";
+import { setBackdropMotion, useBackdropMotion } from "../lib/motionPref";
 import { setTipsEnabled, useTipsEnabled } from "../lib/tips";
 import styles from "./ContextMenu.module.css";
 
@@ -63,6 +64,7 @@ function useGlobalSection(): Builder {
   const { openCheckin } = useCheckin();
   const theme = useTheme();
   const tips = useTipsEnabled();
+  const motion = useBackdropMotion();
   const checkedIn = snap.data?.personal.checkedInToday ?? false;
   return () => ({
     items: [
@@ -86,6 +88,11 @@ function useGlobalSection(): Builder {
         label: tips ? "Turn hover help off" : "Turn hover help on",
         onSelect: () => setTipsEnabled(!tips),
         tip: "Shows or hides the explanations that appear when you hover over controls.",
+      },
+      {
+        label: motion ? "Pause background motion" : "Resume background motion",
+        onSelect: () => setBackdropMotion(!motion),
+        tip: "Stops or starts the moving background and the Life map radar. Remembered in this browser.",
       },
     ],
   });

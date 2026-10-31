@@ -114,6 +114,17 @@ export type MovesCheck = { ok: true; moves: ProposedMove[] } | { ok: false; erro
 const nonEmptyString = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
 /**
+ * The rank only orders the list, so a bad one never sinks the whole answer: a number is kept, a
+ * number written as text ("3") is read, and anything else (missing, null, "first") falls back to
+ * the move's position in the answer.
+ */
+export function rankOf(value: unknown, position: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^\s*\d+(\.\d+)?\s*$/.test(value)) return Number(value);
+  return position;
+}
+
+/**
  * Guard for the model's answer: an array of NextMove without `state`.
  * Any bad item rejects the whole answer. Extra keys are dropped; text is cleaned to one line.
  */
@@ -129,7 +140,6 @@ export function validateProposedMoves(value: unknown): MovesCheck {
     if (typeof item.area !== "string" || !AREAS.includes(item.area as Area)) {
       return { ok: false, error: `${where} has an unknown area` };
     }
-    if (typeof item.rank !== "number" || !Number.isFinite(item.rank)) return { ok: false, error: `${where} has no numeric rank` };
     if (item.sourceUrl !== undefined && item.sourceUrl !== null && typeof item.sourceUrl !== "string") {
       return { ok: false, error: `${where} has a sourceUrl that is not a string` };
     }
@@ -138,7 +148,7 @@ export function validateProposedMoves(value: unknown): MovesCheck {
       title: oneLine(item.title, TITLE_MAX),
       reason: oneLine(item.reason, REASON_MAX),
       area: item.area as Area,
-      rank: item.rank,
+      rank: rankOf(item.rank, i + 1),
     };
     if (typeof item.sourceUrl === "string" && item.sourceUrl.trim() !== "") move.sourceUrl = item.sourceUrl.trim();
     moves.push(move);

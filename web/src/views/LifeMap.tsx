@@ -972,6 +972,19 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
             Reset view
           </Button>
         </div>
+        {/* Background: a slow starfield over the whole stage, and a radar sweep with pulse rings
+            centred on you. Follows pan and zoom; holds still when Motion is off or the OS asks. */}
+        <div className={styles.starfield} aria-hidden="true" />
+        <div
+          className={styles.radar}
+          aria-hidden="true"
+          style={{ left: center.x, top: center.y, ["--radar-r" as string]: `${Math.round(RING_RADII[RING_RADII.length - 1] * k * 1.15)}px` }}
+        >
+          <div className={styles.sweep} />
+          <div className={styles.pulse} />
+          <div className={styles.pulse} style={{ animationDelay: "-2.7s" }} />
+          <div className={styles.pulse} style={{ animationDelay: "-5.4s" }} />
+        </div>
         <svg
           ref={svgRef}
           className={styles.svg}

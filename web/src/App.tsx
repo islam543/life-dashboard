@@ -9,6 +9,7 @@ import { Home } from "./views/Home";
 import { LifeMap } from "./views/LifeMap";
 import { Notes } from "./views/Notes";
 import { Projects } from "./views/Projects";
+import { Backdrop } from "./ui/Backdrop";
 import { ContextMenuLayer } from "./ui/ContextMenu";
 import { TipLayer } from "./ui/TipLayer";
 
@@ -58,6 +59,7 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <DetailProvider>
         <CheckinProvider>
+          <Backdrop />
           <AppShell route={route.view}>
             <AnimatePresence mode="wait" initial={false}>
               {/* Keyed by view only: opening a project or note inside a view keeps the view mounted. */}

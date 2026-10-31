@@ -17,6 +17,7 @@ import {
 } from "../lib/format";
 import { noteHash, parseHash, projectHash, toHash, type View } from "../lib/route";
 import { setTipsEnabled, useTipsEnabled } from "../lib/tips";
+import { MotionSwitch } from "./MotionSwitch";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { Button } from "../ui/Button";
 import { useMenuRegion } from "../ui/ContextMenu";
@@ -340,6 +341,7 @@ export function Header({ route }: { route: Route }) {
           </p>
           <TipsSwitch />
           <ThemeSwitch />
+          <MotionSwitch />
           <Button
             icon={<RefreshIcon />}
             loading={snap.collecting}
