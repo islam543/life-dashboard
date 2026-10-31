@@ -51,7 +51,10 @@ describe("connectorArgs", () => {
       "-p", "PROMPT",
       "--model", "sonnet",
       "--tools", "ToolSearch",
-      "--allowedTools", "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql",
+      "--allowedTools",
+      "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql",
+      "mcp__claude_ai_Google_Calendar__list_events",
+      "mcp__claude_ai_Gmail__search_threads",
       "--disallowedTools", ...BLOCKED_TOOLS,
       "--setting-sources", "project",
       "--output-format", "json",
@@ -101,9 +104,11 @@ describe("buildConnectorPrompt", () => {
     expect(prompt).toContain(
       'select:mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql,mcp__claude_ai_Google_Calendar__list_events,mcp__claude_ai_Gmail__search_threads',
     );
-    expect(prompt).toContain("primary calendar from 2026-10-31T12:00:00+03:00 to 2026-11-01T23:59:59+03:00 (time zone Asia/Qatar)");
-    expect(prompt).toContain("Skip events you declined. At most 30 events.");
-    expect(prompt).toContain('unread inbox mail from the last 2 days (query "is:unread in:inbox newer_than:2d"), at most 20 messages');
+    expect(prompt).toContain(
+      'calendarId "primary", startTime "2026-10-31T12:00:00+03:00", endTime "2026-11-01T23:59:59+03:00", timeZone "Asia/Qatar", orderBy "startTime", pageSize 30',
+    );
+    expect(prompt).toContain('responseStatus "declined"');
+    expect(prompt).toContain('query "is:unread in:inbox newer_than:2d", pageSize 20, view "THREAD_VIEW_SUMMARY"');
     expect(prompt).toContain("Never open or read a message body.");
     expect(prompt).not.toContain("Not part of this run");
   });

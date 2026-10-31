@@ -8,15 +8,15 @@ import { createStore, type Store } from "../store";
 import { emailCollector } from "./email";
 import type { CollectorContext } from "./types";
 
-// Gmail has no connector tools until Islam signs in; this switch stands in for the
-// supervisor filling tools.ts, so the cache path can be tested too.
+// "off" stands for a setup where Calendar and Gmail have no connector tools (not signed in);
+// "on" enables every service, so both the sign-in message and the cache path are tested.
 const tools = vi.hoisted(() => ({ on: false }));
 vi.mock("../connectors/tools", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../connectors/tools")>();
   return {
     ...actual,
     enabledServices: (lists?: Parameters<typeof actual.enabledServices>[0]) =>
-      tools.on ? [...actual.CONNECTOR_SERVICES] : actual.enabledServices(lists),
+      tools.on ? [...actual.CONNECTOR_SERVICES] : actual.enabledServices({ ...actual.CONNECTOR_TOOLS, calendar: [], email: [], ...lists }),
   };
 });
 

@@ -4,9 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../config";
 import { createStore, FILES } from "../store";
-import { calendarCollector } from "./calendar";
 import { checkinsCollector, selectCheckins, windowStart } from "./checkins";
-import { emailCollector } from "./email";
 import type { CollectorContext, CollectorSlices, SourceKey } from "./types";
 
 const NOW = new Date(2026, 9, 30, 21, 15); // local time, 2026-10-30
@@ -122,23 +120,5 @@ describe("checkinsCollector", () => {
     await writeFile(c.store.pathOf(FILES.checkins), "{ not json", "utf8");
     const result = await checkinsCollector.collect(c);
     expect(result).toEqual({ status: "ok", data: { checkins: [], checkedInToday: false } });
-  });
-});
-
-describe("calendar and email stubs", () => {
-  it("calendar is not_connected with an empty list", async () => {
-    expect(await calendarCollector.collect(ctx<"calendar">({ calendar: [] }))).toEqual({
-      status: "not_connected",
-      message: "Sign in for Claude Code: run claude, type /mcp, pick claude.ai Google Calendar",
-      data: { calendar: [] },
-    });
-  });
-
-  it("email is not_connected with an empty list", async () => {
-    expect(await emailCollector.collect(ctx<"email">({ email: [] }))).toEqual({
-      status: "not_connected",
-      message: "Sign in for Claude Code: run claude, type /mcp, pick claude.ai Gmail",
-      data: { email: [] },
-    });
   });
 });

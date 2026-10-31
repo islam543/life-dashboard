@@ -8,9 +8,11 @@ Checked on 2026-10-31.
 
 | Service | Connector | Status on this PC |
 |---|---|---|
-| Jira (`qicbizdev.atlassian.net`) | Atlassian | Working. The dashboard reads it in the background. |
-| Work calendar | Google Calendar | Signed in at claude.ai, but not yet for Claude Code (see below) |
-| Work email | Gmail | Signed in at claude.ai, but not yet for Claude Code (see below) |
+| Jira (`qicbizdev.atlassian.net`) | Atlassian | Working. Read tool: `searchJiraIssuesUsingJql`. |
+| Work calendar | Google Calendar | Working. Read tool: `list_events`. |
+| Work email | Gmail | Working. Read tool: `search_threads` (sender and subject only). |
+
+The first run with all three took 24 seconds. The run may call only these three tools: send, reply, forward, draft, label, trash, and creating, changing or answering events are never allowed.
 
 Your work address (`bd.qatarinsurance.com`) runs on Google Workspace, so your work mail and calendar are Gmail and Google Calendar. A DNS check of the domain's mail servers (MX records) confirmed this.
 
@@ -26,11 +28,11 @@ How it works:
 
 What you need to do:
 - **Jira:** nothing.
-- **Calendar and Gmail:** Claude Code needs its own sign-in to them. Being signed in at claude.ai is not enough for background runs. Until you do this, those panels say "Sign in for Claude Code".
+- **Calendar and Gmail:** done on 2026-10-31. Claude Code needs its own sign-in to them; being signed in at claude.ai is not enough for background runs. If a panel ever says "Sign in for Claude Code", sign in again:
   1. Open a terminal and type `claude`.
   2. Type `/mcp`.
   3. Pick **claude.ai Google Calendar** and sign in. Do the same for **claude.ai Gmail**.
-  4. Tell Claude in this project that you signed in. It then adds the exact read-only tool names to the dashboard (the file `server/connectors/tools.ts`).
+- **Gmail detail:** the read tool gives sender and subject but no date or link, so the dashboard reads the time from the Gmail message id (it has the time built in) and builds the link from the thread id.
 - **Optional:** to change how often it runs, add `CONNECTORS_EVERY_MIN=30` (any number of minutes, 15 or more) to `.env` and restart the dashboard.
 
 Panel states:

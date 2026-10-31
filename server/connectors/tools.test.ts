@@ -2,13 +2,32 @@ import { describe, expect, it } from "vitest";
 import { CONNECTOR_SERVICES, CONNECTOR_TOOLS, allowedConnectorTools, enabledServices, isReadOnlyToolName, signInMessage } from "./tools";
 
 describe("connector tool allowlist", () => {
-  it("Jira has exactly the JQL search tool; Calendar and Gmail wait for sign-in", () => {
+  it("each service has exactly one read tool", () => {
     expect(CONNECTOR_TOOLS).toEqual({
       jira: ["mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql"],
-      calendar: [],
-      email: [],
+      calendar: ["mcp__claude_ai_Google_Calendar__list_events"],
+      email: ["mcp__claude_ai_Gmail__search_threads"],
     });
-    expect(enabledServices()).toEqual(["jira"]);
+    expect(enabledServices()).toEqual(["jira", "calendar", "email"]);
+  });
+
+  it("rejects the Gmail and Calendar tools that change or send anything", () => {
+    for (const name of [
+      "mcp__claude_ai_Gmail__send_message",
+      "mcp__claude_ai_Gmail__reply",
+      "mcp__claude_ai_Gmail__forward",
+      "mcp__claude_ai_Gmail__create_draft",
+      "mcp__claude_ai_Gmail__trash_thread",
+      "mcp__claude_ai_Gmail__label_message",
+      "mcp__claude_ai_Gmail__mark_message_spam",
+      "mcp__claude_ai_Gmail__update_message_labels",
+      "mcp__claude_ai_Google_Calendar__create_event",
+      "mcp__claude_ai_Google_Calendar__update_event",
+      "mcp__claude_ai_Google_Calendar__delete_event",
+      "mcp__claude_ai_Google_Calendar__respond_to_event",
+    ]) {
+      expect(isReadOnlyToolName(name)).toBe(false);
+    }
   });
 
   it("every configured tool is a read-only claude.ai connector tool", () => {

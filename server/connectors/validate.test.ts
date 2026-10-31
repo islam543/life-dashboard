@@ -403,3 +403,36 @@ describe("cache to collector status", () => {
     expect(fetchedLabel(new Date("2026-10-30T21:00:00Z"), NOW)).toBe("00:00");
   });
 });
+
+describe("Gmail summary view (no date, no link)", async () => {
+  const { cleanEmail, gmailIdTime, gmailThreadUrl } = await import("./validate");
+  const at = Date.UTC(2026, 9, 31, 10, 0, 0);
+  const id = at.toString(16).padStart(11, "0") + "0a1b2";
+
+  it("reads the time from a Gmail message id", () => {
+    expect(gmailIdTime(id, at + 1000)).toBe("2026-10-31T10:00:00.000Z");
+  });
+
+  it("rejects ids that are not 16 hex digits, or whose time is before 2004 or in the future", () => {
+    expect(gmailIdTime("ABCDEF0123456789")).toBeNull();
+    expect(gmailIdTime("123")).toBeNull();
+    expect(gmailIdTime("0000000000000000")).toBeNull();
+    expect(gmailIdTime(id, at - 2 * 60 * 60_000)).toBeNull();
+    expect(gmailIdTime({ toString: () => id })).toBeNull();
+  });
+
+  it("builds the thread link only from a real thread id", () => {
+    expect(gmailThreadUrl(id)).toBe(`https://mail.google.com/mail/u/0/#all/${id}`);
+    expect(gmailThreadUrl("../../evil")).toBeUndefined();
+    expect(gmailThreadUrl("https://evil.example/x")).toBeUndefined();
+  });
+
+  it("fills time and link for a summary-view message", () => {
+    const mail = cleanEmail({ id, threadId: id, from: "A Person <a@example.com>", subject: "Hello" });
+    expect(mail).toMatchObject({ id, receivedAt: "2026-10-31T10:00:00.000Z", url: `https://mail.google.com/mail/u/0/#all/${id}` });
+  });
+
+  it("still drops a message with no usable time", () => {
+    expect(cleanEmail({ id: "not-a-gmail-id", from: "A", subject: "x" })).toBeNull();
+  });
+});

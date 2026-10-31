@@ -102,7 +102,7 @@ export interface PromptInput {
 const JSON_SHAPE =
   '{"jira":{"status":"ok","issues":[{"key":"ABC-123","summary":"...","status":"In Progress","statusCategory":"todo|inprogress|done","priority":"High","dueDate":"YYYY-MM-DD or null","updated":"ISO 8601 date-time","project":"Project name","labels":["..."],"url":"https://<jira site>/browse/ABC-123"}]},' +
   '"calendar":{"status":"ok","events":[{"id":"...","title":"...","start":"ISO 8601 date-time with offset, or YYYY-MM-DD for an all-day event","end":"same format as start","url":"https://calendar.google.com/..."}]},' +
-  '"email":{"status":"ok","messages":[{"id":"...","from":"Name <address>","subject":"...","receivedAt":"ISO 8601 date-time with offset","url":"https://mail.google.com/..."}]}}';
+  '"email":{"status":"ok","messages":[{"id":"message id","threadId":"thread id","from":"Name <address>","subject":"...","receivedAt":"ISO 8601 date-time with offset, or leave it out if the tool gives none"}]}}';
 
 /** The run's prompt. Holds no dashboard data: only tool names, the Jira site and the time window. */
 export function buildConnectorPrompt(input: PromptInput): string {
@@ -118,14 +118,16 @@ export function buildConnectorPrompt(input: PromptInput): string {
   }
   if (input.services.includes("calendar")) {
     steps.push(
-      `- Google Calendar: with ${tools("calendar").join(" or ")}, list events on the primary calendar from ${from} to ${to} ` +
-        `(time zone Asia/Qatar). Skip events you declined. At most ${MAX_CALENDAR} events.`,
+      `- Google Calendar: with ${tools("calendar").join(" or ")}, call it with calendarId "primary", startTime "${from}", endTime "${to}", ` +
+        `timeZone "Asia/Qatar", orderBy "startTime", pageSize ${MAX_CALENDAR}. Skip an event when the attendee marked self has ` +
+        `responseStatus "declined". Use the event's summary as title and its htmlLink as url.`,
     );
   }
   if (input.services.includes("email")) {
     steps.push(
-      `- Gmail: with ${tools("email").join(" or ")}, search unread inbox mail from the last 2 days (query "${GMAIL_QUERY}"), ` +
-        `at most ${MAX_EMAIL} messages. Read the sender, subject and date only. Never open or read a message body.`,
+      `- Gmail: with ${tools("email").join(" or ")}, call it with query "${GMAIL_QUERY}", pageSize ${MAX_EMAIL}, ` +
+        `view "THREAD_VIEW_SUMMARY". For each thread give its latest message id, the thread id, sender and subject only. ` +
+        `Never open or read a message body.`,
     );
   }
   const skipped = CONNECTOR_SERVICES.filter((s) => !input.services.includes(s));

@@ -235,15 +235,35 @@ export function cleanCalendarEvent(raw: unknown): CalendarEvent | null {
   return event;
 }
 
-/** One mail: sender and subject only. Null when the sender or a valid receivedAt is missing. */
+const GMAIL_ID = /^[0-9a-f]{16}$/;
+const GMAIL_EPOCH_MIN = Date.UTC(2004, 0, 1);
+
+/**
+ * The time inside a Gmail message id: 16 hex digits whose first 11 are milliseconds since 1970.
+ * The connector's summary view gives sender and subject but no date, so this fills it in. Null
+ * for anything that is not such an id or whose time is before Gmail existed or in the future.
+ */
+export function gmailIdTime(value: unknown, now: number = Date.now()): string | null {
+  if (typeof value !== "string" || !GMAIL_ID.test(value)) return null;
+  const ms = parseInt(value.slice(0, 11), 16);
+  if (!Number.isFinite(ms) || ms < GMAIL_EPOCH_MIN || ms > now + 60 * 60_000) return null;
+  return new Date(ms).toISOString();
+}
+
+/** A link to the thread built from its id, since the summary view gives none. */
+export function gmailThreadUrl(threadId: unknown): string | undefined {
+  return typeof threadId === "string" && GMAIL_ID.test(threadId) ? `https://mail.google.com/mail/u/0/#all/${threadId}` : undefined;
+}
+
+/** One mail: sender and subject only. Null when the sender or a valid time is missing. */
 export function cleanEmail(raw: unknown): EmailItem | null {
   if (!isObject(raw)) return null;
   const from = cleanText(raw.from, SENDER_MAX);
-  const receivedAt = isoDateTime(raw.receivedAt);
+  const receivedAt = isoDateTime(raw.receivedAt) ?? gmailIdTime(raw.id) ?? gmailIdTime(raw.threadId);
   if (!from || !receivedAt) return null;
   const subject = cleanText(raw.subject, TITLE_MAX) || "(no subject)";
   const item: EmailItem = { id: cleanText(raw.id, ID_MAX) || derivedId("mail", from, receivedAt, subject), from, subject, receivedAt };
-  const url = safeMailUrl(raw.url);
+  const url = safeMailUrl(raw.url) ?? gmailThreadUrl(raw.threadId);
   if (url) item.url = url;
   return item;
 }

@@ -11,12 +11,11 @@ export const CONNECTOR_SERVICES = ["jira", "calendar", "email"] as const satisfi
 
 export const CONNECTOR_TOOLS: Readonly<Record<ConnectorService, readonly string[]>> = {
   jira: ["mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql"],
-  // Empty until Islam signs in to the Google Calendar connector for Claude Code; the
-  // supervisor then fills in the exact read-only tool names.
-  calendar: [],
-  // Empty until Islam signs in to the Gmail connector for Claude Code; the supervisor then
-  // fills in the exact read-only tool names (search or list only, never send or modify).
-  email: [],
+  // Read only. The connector also offers create, update, delete and respond: never listed here.
+  calendar: ["mcp__claude_ai_Google_Calendar__list_events"],
+  // Read only, sender and subject. The connector also offers send, reply, forward, draft, label,
+  // spam and trash tools: never listed here.
+  email: ["mcp__claude_ai_Gmail__search_threads"],
 };
 
 /** The connector's name as claude.ai shows it in /mcp. */
