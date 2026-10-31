@@ -8,6 +8,7 @@ import { plural } from "../lib/format";
 import { projectHash } from "../lib/route";
 import { addedProject, detectedFacts, displayName, rankProjectsFor, seenText, trackInput, withSource, STATUS_LABEL } from "../lib/projects";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { EmptyState } from "../ui/EmptyState";
 import { Panel, type PanelStatus } from "../ui/Panel";
 import { ChevronIcon, FoldIcon, HideIcon, TrackIcon } from "./icons";
@@ -21,11 +22,16 @@ import styles from "./UntrackedTray.module.css";
 // project. Track one (it becomes a project), add it to a project (it becomes one of that project's
 // sources), or hide it (it leaves this list and every chart). Hidden names are listed under the tray
 // with Unhide. The server answers every action with the fresh registry.
+// Right-click a name: Track, Add to project, Hide (a hidden name: Unhide), the row's own buttons.
 
 const FIRST_ROWS = 12;
 
 /** Hover help on a row's other buttons while one action on that name is saving. */
 const BUSY_TIP = "Works again once the current change to this name is saved.";
+const TRACK_TIP = "Creates an active Work project from this name; rename or move it later on its page.";
+const ADD_TIP = "Adds this name as a source of a project you already have, so its activity counts there.";
+const HIDE_TIP = "Hides this name from Untracked, the time bars and the life map; Unhide brings it back.";
+const UNHIDE_TIP = "Returns this name to Untracked and the charts if it was active in the last 90 days.";
 
 export interface UntrackedTrayProps {
   store: ProjectsStore;
@@ -160,25 +166,16 @@ function TrayBody({ store, state, onTracked }: { store: ProjectsStore; state: Pr
           <ul ref={listRef} className={styles.list}>
             <AnimatePresence initial={false}>
               {shown.map((d) => (
-                <motion.li
+                <UntrackedRow
                   key={keyOf(d)}
-                  data-untracked={keyOf(d)}
-                  className={styles.item}
-                  layout="position"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, x: 12, transition: { duration: MOTION.fast } }}
-                  transition={{ duration: MOTION.base, ease: MOTION.easeOut }}
-                >
-                  <UntrackedRow
-                    item={d}
-                    projects={state.projects}
-                    busy={busy[keyOf(d)]}
-                    onTrack={() => void track(d)}
-                    onAdd={(p) => void addTo(d, p)}
-                    onHide={() => void hide(d)}
-                  />
-                </motion.li>
+                  rowKey={keyOf(d)}
+                  item={d}
+                  projects={state.projects}
+                  busy={busy[keyOf(d)]}
+                  onTrack={() => void track(d)}
+                  onAdd={(p) => void addTo(d, p)}
+                  onHide={() => void hide(d)}
+                />
               ))}
             </AnimatePresence>
           </ul>
@@ -201,7 +198,9 @@ function TrayBody({ store, state, onTracked }: { store: ProjectsStore; state: Pr
   );
 }
 
+/** One untracked name, as a list item (a direct child of the list's AnimatePresence, so it can animate out). */
 function UntrackedRow({
+  rowKey,
   item,
   projects,
   busy,
@@ -209,6 +208,7 @@ function UntrackedRow({
   onAdd,
   onHide,
 }: {
+  rowKey: string;
   item: DetectedProject;
   projects: readonly Project[];
   busy: "track" | "add" | "hide" | undefined;
@@ -217,6 +217,26 @@ function UntrackedRow({
   onHide: () => void;
 }) {
   const name = displayName(item.name);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const off = (what: "track" | "add" | "hide") => (busy && busy !== what ? BUSY_TIP : busy === what ? "Already saving this change." : false);
+  const menu = useMenuRegion(() => ({
+    title: name,
+    items: [
+      { label: "Track", icon: <TrackIcon />, tip: TRACK_TIP, disabled: off("track"), onSelect: onTrack },
+      {
+        label: "Add to project",
+        icon: <FoldIcon />,
+        tip: ADD_TIP,
+        disabled: off("add") || (projects.length === 0 ? "No projects yet; use Track to start one." : false),
+        // Opens the row's own project picker, focused on its search box.
+        onSelect: () => {
+          const trigger = rowRef.current?.querySelector<HTMLElement>("[aria-haspopup=listbox]");
+          if (trigger?.getAttribute("aria-expanded") !== "true") trigger?.click();
+        },
+      },
+      { label: "Hide", icon: <HideIcon />, tip: HIDE_TIP, disabled: off("hide"), onSelect: onHide },
+    ],
+  }));
   const options = useMemo(
     () =>
       rankProjectsFor(item.name, projects).map(({ project, suggested }) => ({
@@ -228,7 +248,17 @@ function UntrackedRow({
     [item.name, projects],
   );
   return (
-    <>
+    <motion.li
+      ref={rowRef}
+      data-untracked={rowKey}
+      className={styles.item}
+      layout="position"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, x: 12, transition: { duration: MOTION.fast } }}
+      transition={{ duration: MOTION.base, ease: MOTION.easeOut }}
+      {...menu}
+    >
       <div className={styles.head}>
         <KindIcon kind={item.kind} />
         <span className={styles.name} dir="auto" title={item.name}>
@@ -244,11 +274,7 @@ function UntrackedRow({
           loading={busy === "hide"}
           disabled={!!busy && busy !== "hide"}
           aria-label={`Hide ${name} from projects and charts`}
-          tip={
-            busy && busy !== "hide"
-              ? BUSY_TIP
-              : "Hides this name from Untracked, the time bars and the life map; Unhide brings it back."
-          }
+          tip={busy && busy !== "hide" ? BUSY_TIP : HIDE_TIP}
         />
       </div>
       <p className={styles.facts}>
@@ -265,7 +291,7 @@ function UntrackedRow({
           loadingLabel="Tracking"
           disabled={!!busy && busy !== "track"}
           aria-label={`Track ${name} as a new project`}
-          tip={busy && busy !== "track" ? BUSY_TIP : "Creates an active Work project from this name; rename or move it later on its page."}
+          tip={busy && busy !== "track" ? BUSY_TIP : TRACK_TIP}
         >
           Track
         </Button>
@@ -274,7 +300,7 @@ function UntrackedRow({
           ariaLabel={`Add to project: ${name}`}
           icon={<FoldIcon />}
           searchLabel="Find a project"
-          tip={busy && busy !== "add" ? BUSY_TIP : "Adds this name as a source of a project you already have, so its activity counts there."}
+          tip={busy && busy !== "add" ? BUSY_TIP : ADD_TIP}
           options={options}
           empty="No projects yet. Use Track to start one."
           onPick={(id) => {
@@ -285,7 +311,34 @@ function UntrackedRow({
           disabled={!!busy && busy !== "add"}
         />
       </div>
-    </>
+    </motion.li>
+  );
+}
+
+/** One hidden name with its Unhide button; right-click offers Unhide too. */
+function HiddenItem({ name, onUnhide }: { name: string; onUnhide: () => void }) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  /** The row leaves (and the whole list when it was the last one): keep focus nearby. */
+  const unhide = () => {
+    const row = rowRef.current;
+    const sibling = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-part=unhide]");
+    const tray = row?.closest("section");
+    handOffFocus(row, sibling ?? tray?.querySelector<HTMLElement>("[data-part=track]") ?? document.getElementById("main"));
+    onUnhide();
+  };
+  const menu = useMenuRegion(() => ({
+    title: displayName(name),
+    items: [{ label: "Unhide", tip: UNHIDE_TIP, onSelect: unhide }],
+  }));
+  return (
+    <li ref={rowRef} className={styles.hiddenItem} {...menu}>
+      <span className={styles.hiddenName} dir="auto" title={name}>
+        {name}
+      </span>
+      <Button size="sm" variant="ghost" data-part="unhide" aria-label={`Unhide ${displayName(name)}`} tip={UNHIDE_TIP} onClick={unhide}>
+        Unhide
+      </Button>
+    </li>
   );
 }
 
@@ -311,28 +364,7 @@ function HiddenList({ names, onUnhide }: { names: readonly string[]; onUnhide: (
       </button>
       <ul id={listId} className={styles.hiddenList} hidden={!open}>
         {sorted.map((n) => (
-          <li key={n} className={styles.hiddenItem}>
-            <span className={styles.hiddenName} dir="auto" title={n}>
-              {n}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              data-part="unhide"
-              aria-label={`Unhide ${displayName(n)}`}
-              tip="Returns this name to Untracked and the charts if it was active in the last 90 days."
-              onClick={(e) => {
-                // The row leaves (and the whole list when it was the last one): keep focus nearby.
-                const row = e.currentTarget.closest("li");
-                const sibling = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-part=unhide]");
-                const tray = e.currentTarget.closest("section");
-                handOffFocus(row, sibling ?? tray?.querySelector<HTMLElement>("[data-part=track]") ?? document.getElementById("main"));
-                onUnhide(n);
-              }}
-            >
-              Unhide
-            </Button>
-          </li>
+          <HiddenItem key={n} name={n} onUnhide={() => onUnhide(n)} />
         ))}
       </ul>
       {open ? <p className={styles.hiddenHint}>Hidden names stay out of Untracked, the time bars and the life map.</p> : null}

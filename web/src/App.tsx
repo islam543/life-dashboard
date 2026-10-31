@@ -9,6 +9,7 @@ import { Home } from "./views/Home";
 import { LifeMap } from "./views/LifeMap";
 import { Notes } from "./views/Notes";
 import { Projects } from "./views/Projects";
+import { ContextMenuLayer } from "./ui/ContextMenu";
 import { TipLayer } from "./ui/TipLayer";
 
 // Routes live in the hash (see lib/route.ts): "#/" Home (glance), "#/projects[/<id>]",
@@ -71,6 +72,7 @@ export default function App() {
               </motion.div>
             </AnimatePresence>
           </AppShell>
+          <ContextMenuLayer />
           <TipLayer />
         </CheckinProvider>
       </DetailProvider>

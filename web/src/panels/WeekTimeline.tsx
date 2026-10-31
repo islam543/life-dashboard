@@ -18,8 +18,10 @@ import {
   type WeekItem,
   type WeekPlacement,
 } from "../lib/timeAgg";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { Panel, panelFromSource, type PanelStatus } from "../ui/Panel";
 import { StatusDot, type StatusTone } from "../ui/StatusDot";
+import { openItem } from "./linkMenu";
 import { ChartTooltip, useElementWidth, type TipData } from "./ProjectTimeBars";
 import styles from "./WeekTimeline.module.css";
 
@@ -28,6 +30,7 @@ import styles from "./WeekTimeline.module.css";
 // lane on the left. Today is lit. Hover or focus an item for details; click opens it in its source.
 // A source that is not connected gets one small line under the chart instead of emptying it.
 // Narrow panels keep the 7 bar columns and list the items by day underneath.
+// Right-click an issue or event to open it in Jira or Google Calendar; the panel for Open details.
 
 const TITLE = "This week";
 const DETAIL = { area: "work", key: "week" } as const;
@@ -123,7 +126,17 @@ function Chip({
     animate ? styles.chipIn : "",
   ].join(" ");
   const style = animate ? ({ "--i": index } as CSSProperties) : undefined;
+  const menu = useMenuRegion(() => ({
+    title: item.kind === "jira" ? `${item.issue.key} ${item.title}` : item.title,
+    items: [
+      openItem(
+        item.url,
+        item.kind === "jira" ? "Opens this issue in Jira in a new tab." : "Opens this event in Google Calendar in a new tab.",
+      ),
+    ],
+  }));
   const handlers = {
+    ...menu,
     onPointerEnter: (e: PointerEvent<HTMLElement>) => onTip(item, e.currentTarget),
     onPointerLeave: () => onTip(null),
     onFocus: (e: FocusEvent<HTMLElement>) => onTip(item, e.currentTarget),
@@ -154,7 +167,13 @@ function Chip({
     </a>
   ) : (
     // Nothing to open: plain text, hover still shows the details.
-    <span className={cls} style={style} onPointerEnter={handlers.onPointerEnter} onPointerLeave={handlers.onPointerLeave}>
+    <span
+      className={cls}
+      style={style}
+      onPointerEnter={handlers.onPointerEnter}
+      onPointerLeave={handlers.onPointerLeave}
+      onContextMenu={handlers.onContextMenu}
+    >
       {body}
     </span>
   );
@@ -569,6 +588,7 @@ export function WeekTimeline() {
       title={TITLE}
       {...status}
       fit
+      menu
       skeleton="chart"
       detail={DETAIL}
       meta={status.state === "ok" ? weekRangeLabel(now) : undefined}

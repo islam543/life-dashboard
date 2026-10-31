@@ -529,3 +529,9 @@
     display: none;
   }
 }
+
+/* Holds the board's right-click section (Board.tsx) without adding a box: the panel stays the
+   layout child it was, so the ultrawide fill height still reaches it. */
+.region {
+  display: contents;
+}

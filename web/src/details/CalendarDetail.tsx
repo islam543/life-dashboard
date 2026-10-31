@@ -4,15 +4,17 @@ import type { DetailProps } from "../context/DetailContext";
 import { useSnapshot, type SnapshotResult } from "../hooks/useSnapshot";
 import { groupEventsByDay, isAllDay, parseDay } from "../lib/detailRows";
 import { dayKey, formatClock, formatMinutes, plural, relativeTime } from "../lib/format";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { Panel, panelFromSource, type PanelStatus } from "../ui/Panel";
 import { StatusDot } from "../ui/StatusDot";
+import { useLinkItems } from "./rowMenu";
 import { DataTable, Stagger, StaggerItem, TruncText, type Column } from "./WorkDetail";
 import styles from "./CalendarDetail.module.css";
 
 // Calendar and email explore view (areas "calendar" and "email" share it; "email" puts email first).
 // Neither source is connected in v1, so both panels show the exact steps to connect them in
 // claude.ai. Once data arrives: a day-by-day agenda and a sortable list of emails waiting on you.
-// Never shows sample events.
+// Never shows sample events. Right-click an event or email with a link for "Open in ..." and "Copy link".
 
 const cx = (...names: Array<string | false | null | undefined>) => names.filter(Boolean).join(" ");
 const dayHeading = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
@@ -51,6 +53,39 @@ function statusWithSteps(
 
 /* ------------------------------------------------------------------ agenda */
 
+const EVENT_TIP = "Opens this event in Google Calendar in a new tab.";
+const EMAIL_TIP = "Opens this email in Gmail in a new tab.";
+
+function EventItem({ event: e, now }: { event: CalendarEvent; now: Date }) {
+  const linkItems = useLinkItems();
+  const menu = useMenuRegion(() => ({ title: e.title, items: linkItems(e.url, EVENT_TIP) }));
+  const allDay = isAllDay(e);
+  const start = new Date(e.start);
+  const end = new Date(e.end);
+  const live = !allDay && start <= now && now < end;
+  const past = !allDay && end <= now;
+  const minutes = (end.getTime() - start.getTime()) / 60_000;
+  return (
+    <li {...menu} className={cx(styles.event, live && styles.live, past && styles.past)}>
+      <span className={cx(styles.time, "num")}>
+        {allDay ? "All day" : formatClock(start)}
+        {!allDay && Number.isFinite(minutes) && minutes > 0 ? <span className={styles.duration}>{formatMinutes(minutes)}</span> : null}
+      </span>
+      <span className={styles.rail} aria-hidden="true">
+        <StatusDot tone={live ? "ok" : past ? "idle" : "ok"} size={9} glow={live} pulse={live} />
+      </span>
+      <span className={styles.eventMain}>
+        {live ? <span className={styles.nowTag}>Now</span> : null}
+        {e.url ? (
+          <TruncText href={e.url} text={e.title} className={styles.eventTitle} tip={EVENT_TIP} />
+        ) : (
+          <TruncText text={e.title} className={styles.eventTitle} />
+        )}
+      </span>
+    </li>
+  );
+}
+
 function dayTitle(key: string, now: Date): string {
   const today = dayKey(now);
   const tomorrow = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
@@ -73,33 +108,9 @@ function Agenda({ events, now }: { events: CalendarEvent[]; now: Date }) {
             <span className={cx(styles.dayCount, "num")}>{plural(day.items.length, "event")}</span>
           </h3>
           <ol className={styles.events}>
-            {day.items.map((e) => {
-              const allDay = isAllDay(e);
-              const start = new Date(e.start);
-              const end = new Date(e.end);
-              const live = !allDay && start <= now && now < end;
-              const past = !allDay && end <= now;
-              const minutes = (end.getTime() - start.getTime()) / 60_000;
-              return (
-                <li key={e.id} className={cx(styles.event, live && styles.live, past && styles.past)}>
-                  <span className={cx(styles.time, "num")}>
-                    {allDay ? "All day" : formatClock(start)}
-                    {!allDay && Number.isFinite(minutes) && minutes > 0 ? <span className={styles.duration}>{formatMinutes(minutes)}</span> : null}
-                  </span>
-                  <span className={styles.rail} aria-hidden="true">
-                    <StatusDot tone={live ? "ok" : past ? "idle" : "ok"} size={9} glow={live} pulse={live} />
-                  </span>
-                  <span className={styles.eventMain}>
-                    {live ? <span className={styles.nowTag}>Now</span> : null}
-                    {e.url ? (
-                      <TruncText href={e.url} text={e.title} className={styles.eventTitle} tip="Opens this event in Google Calendar in a new tab." />
-                    ) : (
-                      <TruncText text={e.title} className={styles.eventTitle} />
-                    )}
-                  </span>
-                </li>
-              );
-            })}
+            {day.items.map((e) => (
+              <EventItem key={e.id} event={e} now={now} />
+            ))}
           </ol>
         </StaggerItem>
       ))}
@@ -110,6 +121,7 @@ function Agenda({ events, now }: { events: CalendarEvent[]; now: Date }) {
 /* ------------------------------------------------------------------- email */
 
 function EmailTable({ emails, now }: { emails: EmailItem[]; now: Date }) {
+  const linkItems = useLinkItems();
   const columns: Column<EmailItem>[] = [
     {
       id: "from",
@@ -124,7 +136,7 @@ function EmailTable({ emails, now }: { emails: EmailItem[]; now: Date }) {
       width: "52%",
       sort: { value: (r) => r.subject, firstDir: "asc" },
       cell: (r) => (r.url ? (
-          <TruncText href={r.url} text={r.subject || "(no subject)"} tip="Opens this email in Gmail in a new tab." />
+          <TruncText href={r.url} text={r.subject || "(no subject)"} tip={EMAIL_TIP} />
         ) : (
           <TruncText text={r.subject || "(no subject)"} />
         )),
@@ -147,6 +159,7 @@ function EmailTable({ emails, now }: { emails: EmailItem[]; now: Date }) {
       rowKey={(r) => r.id}
       defaultSort={{ column: "received", dir: "desc" }}
       minWidth={380}
+      rowMenu={(r) => ({ title: r.subject || "(no subject)", items: linkItems(r.url, EMAIL_TIP) })}
     />
   );
 }
@@ -173,14 +186,14 @@ export function CalendarDetail({ area }: DetailProps) {
 
   const calendarPanel = (
     <StaggerItem key="calendar" className={styles.calendarCell}>
-      <Panel title="Agenda" {...calendarStatus} meta={events.length > 0 ? plural(events.length, "event") : undefined} skeleton="rows">
+      <Panel title="Agenda" {...calendarStatus} menu meta={events.length > 0 ? plural(events.length, "event") : undefined} skeleton="rows">
         <Agenda events={events} now={now} />
       </Panel>
     </StaggerItem>
   );
   const emailPanel = (
     <StaggerItem key="email" className={styles.emailCell}>
-      <Panel title="Emails waiting on you" {...emailStatus} meta={emails.length > 0 ? plural(emails.length, "email") : undefined} skeleton="rows">
+      <Panel title="Emails waiting on you" {...emailStatus} menu meta={emails.length > 0 ? plural(emails.length, "email") : undefined} skeleton="rows">
         <EmailTable emails={emails} now={now} />
       </Panel>
     </StaggerItem>

@@ -1,8 +1,7 @@
 import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import type { DetectedProject, NoteMeta, Project, ProjectArea, ProjectsState, ProjectStatus } from "../../../shared/types";
-import { ApiRequestError, errorMessage } from "../api";
-import { notesApi } from "../api/notes";
+import type { DetectedProject, NoteMeta, Project, ProjectArea, ProjectStatus } from "../../../shared/types";
+import { errorMessage } from "../api";
 import { projectsApi, type ProjectPatch } from "../api/projects";
 import { MOTION } from "../hooks/useReducedMotion";
 import { formatMinutes, plural, relativeTime } from "../lib/format";
@@ -14,7 +13,6 @@ import {
   detectedFacts,
   displayName,
   LIMITS,
-  meetingNoteTitle,
   notesByProject,
   STATUS_LABEL,
   STATUS_ORDER,
@@ -27,14 +25,27 @@ import { noteHash, projectHash } from "../lib/route";
 import { parseDayKey } from "../lib/timeAgg";
 import { Segmented } from "../panels/ProjectTimeBars";
 import { Button, ButtonLink } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { CountUp } from "../ui/CountUp";
 import { EmptyState } from "../ui/EmptyState";
 import { Panel, PANEL_RADIUS, type PanelStatus } from "../ui/Panel";
 import { StatusDot } from "../ui/StatusDot";
+import {
+  clickIn,
+  focusIn,
+  meetingNoteOff,
+  patchProject,
+  ROW_MENU,
+  useDeleteProject,
+  useMeetingNote,
+  useProjectSave,
+  useTargetMenuRegion,
+} from "./actions";
 import { boardStatus, cardLayoutId } from "./Board";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
-import { BackIcon, CloseIcon, NoteIcon, PlusIcon, RepoIcon, SessionIcon, TrashIcon } from "./icons";
+import { BackIcon, CloseIcon, NoteIcon, PencilIcon, PlusIcon, RepoIcon, SessionIcon, TrashIcon } from "./icons";
 import { InlineText } from "./InlineText";
+import { MOVE_TIP, moveLabel, moveTargets } from "./menus";
 import { AreaChip, DueBadge, handOffFocus, KindIcon, partStyles, ProgressBar } from "./parts";
 import { Picker } from "./Picker";
 import { TaskList } from "./TaskList";
@@ -49,35 +60,12 @@ import styles from "./ProjectDetail.module.css";
 // "Meeting notes" linked to this project and opens it. Delete asks first and says what happens.
 // Ultrawide (>=1920px): three columns that fill the window, each scrolling inside itself:
 // overview and goals | tasks | time, notes and sources (CSS only, see .wide).
+//
+// Right-click (ui/ContextMenu.tsx): the page offers Add task, Add goal, New meeting note, Move to and
+// Delete project; a task, goal, linked note or source offers its own row actions instead. Every item
+// runs the same handler as the control it matches (the shared ones live in actions.ts).
 
-const MEETING_SECTION = "Meeting notes";
-
-/** Hover help on each status option: where the project goes and what it changes. Saves at once. */
-const STATUS_TIP: Record<ProjectStatus, string> = {
-  active: "Sets it to Active: first on the board, and its deadline and due tasks reach Needs you.",
-  paused: "Pauses it: moves the card to Paused and keeps its deadlines out of Needs you.",
-  idea: "Parks it in Ideas, out of Needs you, until you set it to Active.",
-  done: "Marks it Done: the card moves to the folded Done column on the board.",
-};
-
-/** Hover help for New meeting note: what it does, or why it is off right now. */
-function meetingNoteTip(status: NotesState["status"]): string {
-  switch (status) {
-    case "ok":
-    case "stale":
-      return `Creates a dated note in ${MEETING_SECTION}, linked to this project, and opens it.`;
-    case "not_connected":
-      return "Needs a notes folder first; set NOTES_DIR in .env.";
-    case "failed":
-      return "Needs Notes to be reachable; retry in the Notes panel.";
-    case "error":
-      return "Needs a readable notes folder; the Notes panel says what went wrong.";
-    case "never_run":
-      return "Needs your notes to be read first, which happens on the next refresh.";
-    default:
-      return "Needs your notes to finish loading first.";
-  }
-}
+const GOALS_FULL_TIP = `Holds ${LIMITS.goals} goals at most; remove one to add another.`;
 
 export interface ProjectDetailProps {
   id: string;
@@ -86,13 +74,11 @@ export interface ProjectDetailProps {
   onDeleted: (project: Project) => void;
   /** Grow out of the board card (shared layoutId). False: fade in, used when the board was scrolled down. Default true. */
   morph?: boolean;
+  /** "tasks": arrive with the New task field focused (a card menu's Add task). Default: the top card. */
+  startAt?: "tasks";
 }
 
-function patchProject(s: ProjectsState, id: string, patch: Partial<Project>): ProjectsState {
-  return { ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) };
-}
-
-export function ProjectDetail({ id, store, now, onDeleted, morph = true }: ProjectDetailProps) {
+export function ProjectDetail({ id, store, now, onDeleted, morph = true, startAt }: ProjectDetailProps) {
   const leaving = useRef(false);
   const project = store.state?.projects.find((p) => p.id === id) ?? null;
 
@@ -122,7 +108,9 @@ export function ProjectDetail({ id, store, now, onDeleted, morph = true }: Proje
       </div>
     );
   }
-  return <DetailBody project={project} store={store} now={now} onDeleted={onDeleted} leaving={leaving} morph={morph} />;
+  return (
+    <DetailBody project={project} store={store} now={now} onDeleted={onDeleted} leaving={leaving} morph={morph} startAt={startAt} />
+  );
 }
 
 function BackLink() {
@@ -147,6 +135,7 @@ function DetailBody({
   onDeleted,
   leaving,
   morph,
+  startAt,
 }: {
   project: Project;
   store: ProjectsStore;
@@ -154,11 +143,12 @@ function DetailBody({
   onDeleted: (project: Project) => void;
   leaving: { current: boolean };
   morph: boolean;
+  startAt?: "tasks";
 }) {
-  const toasts = useToasts();
   const uid = useId().replace(/:/g, "");
   const titleId = `project-${uid}-title`;
   const heroRef = useRef<HTMLElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const state = store.state!;
   const stats = state.stats.find((s) => s.id === project.id) ?? null;
   const linked = store.notes.notes ? (notesByProject(store.notes.notes).get(project.id) ?? []) : null;
@@ -168,26 +158,31 @@ function DetailBody({
   const month = dailySeries(stats?.minutesByDay, now, CHART_DAYS).reduce((s, v) => s + v, 0);
   const commits = dailySeries(stats?.commitsByDay, now, CHART_DAYS).reduce((s, v) => s + v, 0);
   const deadline = deadlineInfo(project.deadline, now, project.status);
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [creatingNote, setCreatingNote] = useState(false);
   const notice = boardStatus(store).notice;
+  const writer = useProjectSave(store);
+  const note = useMeetingNote(store);
+  const creatingNote = note.creating === project.id;
+  const del = useDeleteProject(store, onDeleted, {
+    onStart: () => (leaving.current = true),
+    onFail: () => (leaving.current = false),
+  });
 
-  // Arriving from the board or a link: start reading at the top, with focus on this project.
+  // Arriving from the board or a link: start reading at the top, with focus on this project. A card
+  // menu's Add task arrives on the New task field instead.
   useEffect(() => {
+    if (startAt === "tasks" && rootRef.current?.querySelector("[data-part=new-task]")) {
+      focusIn(rootRef.current, "[data-part=new-task]");
+      return;
+    }
     heroRef.current?.focus({ preventScroll: true });
+    // Only on arrival; startAt is read once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
   /** Saves a change; the caller shows a failure (inline fields keep their text and say why). */
-  const save = (patch: ProjectPatch) =>
-    store.write(() => projectsApi.update(project.id, patch), (s) => patchProject(s, project.id, patch));
+  const save = (patch: ProjectPatch) => writer.save(project.id, patch);
   /** Saves a change and reports a failure as a toast, for controls with no room for an inline error. */
-  const saveOrToast = (patch: ProjectPatch, what: string) =>
-    save(patch).catch((err) => {
-      toasts.push({ tone: "error", message: `Couldn't save the ${what}. ${errorMessage(err)}` });
-      throw err;
-    });
+  const saveOrToast = (patch: ProjectPatch, what: string) => writer.saveOrToast(project.id, patch, what);
 
   const setStatus = (status: ProjectStatus) => {
     if (status !== project.status) void saveOrToast({ status }, "status").catch(() => undefined);
@@ -196,47 +191,51 @@ function DetailBody({
     if (area !== project.area) void saveOrToast({ area }, "area").catch(() => undefined);
   };
 
-  const newMeetingNote = async () => {
-    setCreatingNote(true);
-    try {
-      const note = await notesApi.create({
-        section: MEETING_SECTION,
-        title: meetingNoteTitle(project.name, new Date()),
-        projectId: project.id,
-        template: "meeting",
-      });
-      window.location.hash = noteHash(note.path);
-    } catch (err) {
-      setCreatingNote(false);
-      toasts.push({ tone: "error", message: `Couldn't start a meeting note. ${errorMessage(err)}` });
-    }
-  };
+  const newMeetingNote = () => note.start(project);
+  const notesReady = note.ready;
+  const noteTip = note.tip;
 
-  const remove = async () => {
-    setDeleting(true);
-    setDeleteError(null);
-    leaving.current = true;
-    try {
-      await store.write(() => projectsApi.remove(project.id));
-      setConfirming(false);
-      onDeleted(project);
-    } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 404) {
-        setConfirming(false);
-        onDeleted(project);
-        return;
-      }
-      leaving.current = false;
-      setDeleting(false);
-      setDeleteError(errorMessage(err));
-    }
-  };
-
-  const notesReady = store.notes.status === "ok" || store.notes.status === "stale";
-  const noteTip = meetingNoteTip(store.notes.status);
+  // The page's section. Rows with their own section (a task, goal, note or source) and the delete
+  // dialog keep it out, so their menus stay short.
+  const menu = useTargetMenuRegion((target) => {
+    if (target?.closest(`dialog, [${ROW_MENU}]`)) return null;
+    return {
+      title: project.name,
+      items: [
+        {
+          label: "Add task",
+          icon: <PlusIcon />,
+          tip: "Moves to the New task field, ready to type the next step.",
+          onSelect: () => focusIn(rootRef.current, "[data-part=new-task]"),
+        },
+        {
+          label: "Add goal",
+          icon: <PlusIcon />,
+          tip: "Moves to the New goal field, ready to write what done looks like.",
+          disabled: project.goals.length >= LIMITS.goals ? GOALS_FULL_TIP : false,
+          onSelect: () => focusIn(rootRef.current, "[data-part=new-goal]"),
+        },
+        {
+          label: "New meeting note",
+          icon: <NoteIcon />,
+          tip: noteTip,
+          disabled: meetingNoteOff(note),
+          onSelect: () => void newMeetingNote(),
+        },
+        ...moveTargets(project.status).map((s) => ({ label: moveLabel(s), tip: MOVE_TIP[s], onSelect: () => setStatus(s) })),
+        {
+          label: "Delete project",
+          icon: <TrashIcon />,
+          danger: true,
+          tip: "Asks first, then deletes the project; its sources go back to Untracked.",
+          onSelect: () => del.ask(project),
+        },
+      ],
+    };
+  });
 
   return (
-    <div className={`${styles.detail} ${styles.wide}`}>
+    <div ref={rootRef} className={`${styles.detail} ${styles.wide}`} {...menu}>
       <BackLink />
       {notice ? (
         <p className={styles.notice}>
@@ -287,7 +286,7 @@ function DetailBody({
                 size="sm"
                 icon={<TrashIcon />}
                 className={partStyles.danger}
-                onClick={() => setConfirming(true)}
+                onClick={() => del.ask(project)}
                 tip="Asks first, then deletes the project; its sources go back to Untracked."
               >
                 Delete
@@ -335,7 +334,7 @@ function DetailBody({
               </span>
               <Segmented
                 label="Status"
-                options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s], tip: STATUS_TIP[s] }))}
+                options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s], tip: MOVE_TIP[s] }))}
                 value={project.status}
                 onChange={setStatus}
               />
@@ -458,16 +457,13 @@ function DetailBody({
       </div>
 
       <DeleteProjectDialog
-        open={confirming}
+        open={del.open}
         project={project}
         noteCount={linked ? linked.length : null}
-        busy={deleting}
-        error={deleteError}
-        onCancel={() => {
-          setConfirming(false);
-          setDeleteError(null);
-        }}
-        onConfirm={() => void remove()}
+        busy={del.busy}
+        error={del.error}
+        onCancel={del.cancel}
+        onConfirm={() => void del.confirm()}
       />
     </div>
   );
@@ -576,7 +572,15 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
   const inputRef = useRef<HTMLInputElement>(null);
   const goals = project.goals;
   const full = goals.length >= LIMITS.goals;
-  const fullTip = `Holds ${LIMITS.goals} goals at most; remove one to add another.`;
+  const fullTip = GOALS_FULL_TIP;
+
+  /** Removes goal `i` right away (no undo), keeping keyboard focus in the list when its row held it. */
+  const remove = (i: number, row: Element | null) => {
+    setError(null);
+    const next = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-part=remove-goal]");
+    handOffFocus(row, next ?? inputRef.current);
+    void onSave(goals.filter((_, j) => j !== i)).catch((err) => setError(`Couldn't remove the goal. ${errorMessage(err)}`));
+  };
 
   const add = async () => {
     const value = draft.trim();
@@ -610,39 +614,13 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
       ) : (
         <ol className={styles.goalList}>
           {goals.map((g, i) => (
-            <li key={`${i}-${g}`} className={styles.goal}>
-              <span className={styles.goalIndex} aria-hidden="true">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className={styles.goalText}>
-                <InlineText
-                  value={g}
-                  label={`Goal ${i + 1}`}
-                  editLabel={`Edit goal ${i + 1}`}
-                  maxLength={LIMITS.goal}
-                  requiredMessage="A goal needs some text. Remove it instead if it is not needed."
-                  quietButton
-                  tip="Edits this goal; Enter saves, Esc cancels."
-                  onSave={(next) => onSave(goals.map((x, j) => (j === i ? next : x)))}
-                />
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<CloseIcon />}
-                className={styles.goalRemove}
-                aria-label={`Remove goal ${i + 1}: ${g}`}
-                tip="Deletes this goal right away; there is no undo."
-                data-part="remove-goal"
-                onClick={(e) => {
-                  setError(null);
-                  const row = e.currentTarget.closest("li");
-                  const next = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-part=remove-goal]");
-                  handOffFocus(row, next ?? inputRef.current);
-                  void onSave(goals.filter((_, j) => j !== i)).catch((err) => setError(`Couldn't remove the goal. ${errorMessage(err)}`));
-                }}
-              />
-            </li>
+            <GoalItem
+              key={`${i}-${g}`}
+              goal={g}
+              index={i}
+              onSaveText={(next) => onSave(goals.map((x, j) => (j === i ? next : x)))}
+              onRemove={(row) => remove(i, row)}
+            />
           ))}
         </ol>
       )}
@@ -660,6 +638,7 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
         <input
           ref={inputRef}
           id={`goal-${uid}`}
+          data-part="new-goal"
           className={partStyles.input}
           value={draft}
           dir="auto"
@@ -696,6 +675,93 @@ function Goals({ project, onSave }: { project: Project; onSave: (goals: string[]
   );
 }
 
+const EDIT_GOAL_TIP = "Edits this goal; Enter saves, Esc cancels.";
+const REMOVE_GOAL_TIP = "Deletes this goal right away; there is no undo.";
+
+/** One goal: its text edits in place; right-click offers Edit goal and Remove goal. */
+function GoalItem({
+  goal,
+  index,
+  onSaveText,
+  onRemove,
+}: {
+  goal: string;
+  index: number;
+  onSaveText: (next: string) => Promise<unknown>;
+  onRemove: (row: Element | null) => void;
+}) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  const menu = useMenuRegion(() => ({
+    title: goal,
+    items: [
+      { label: "Edit goal", icon: <PencilIcon />, tip: EDIT_GOAL_TIP, onSelect: () => clickIn(rowRef.current, "[data-part=edit-text]") },
+      { label: "Remove goal", icon: <TrashIcon />, danger: true, tip: REMOVE_GOAL_TIP, onSelect: () => onRemove(rowRef.current) },
+    ],
+  }));
+  return (
+    <li ref={rowRef} className={styles.goal} data-row-menu="" {...menu}>
+      <span className={styles.goalIndex} aria-hidden="true">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <span className={styles.goalText}>
+        <InlineText
+          value={goal}
+          label={`Goal ${index + 1}`}
+          editLabel={`Edit goal ${index + 1}`}
+          maxLength={LIMITS.goal}
+          requiredMessage="A goal needs some text. Remove it instead if it is not needed."
+          quietButton
+          tip={EDIT_GOAL_TIP}
+          onSave={onSaveText}
+        />
+      </span>
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<CloseIcon />}
+        className={styles.goalRemove}
+        aria-label={`Remove goal ${index + 1}: ${goal}`}
+        tip={REMOVE_GOAL_TIP}
+        data-part="remove-goal"
+        onClick={(e) => onRemove(e.currentTarget.closest("li"))}
+      />
+    </li>
+  );
+}
+
+/** One linked note: a link to it in Notes; right-click offers Open note. */
+function NoteItem({ note }: { note: NoteMeta }) {
+  const menu = useMenuRegion(() => ({
+    title: note.title || displayName(note.path),
+    items: [
+      {
+        label: "Open note",
+        icon: <NoteIcon />,
+        tip: "Opens this note in Notes to read or edit it.",
+        onSelect: () => (window.location.hash = noteHash(note.path)),
+      },
+    ],
+  }));
+  return (
+    <li className={styles.note} data-row-menu="" {...menu}>
+      <a href={noteHash(note.path)} className={styles.noteLink} dir="auto" data-tip="Opens this note in Notes to read or edit it.">
+        {note.title || displayName(note.path)}
+      </a>
+      <span className={styles.noteMeta}>
+        <span dir="auto">{note.section}</span>
+        <span aria-hidden="true">·</span>
+        <span>{relativeTime(note.updated, new Date())}</span>
+        {note.openActions > 0 ? (
+          <span className={styles.noteActions}>
+            <span className={styles.noteActionsMark} aria-hidden="true" />
+            {plural(note.openActions, "open action")}
+          </span>
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
 function LinkedNotes({ notes }: { notes: NoteMeta[] }) {
   if (notes.length === 0) {
     return (
@@ -709,22 +775,7 @@ function LinkedNotes({ notes }: { notes: NoteMeta[] }) {
   return (
     <ul className={styles.notes}>
       {notes.slice(0, 12).map((n) => (
-        <li key={n.path} className={styles.note}>
-          <a href={noteHash(n.path)} className={styles.noteLink} dir="auto" data-tip="Opens this note in Notes to read or edit it.">
-            {n.title || displayName(n.path)}
-          </a>
-          <span className={styles.noteMeta}>
-            <span dir="auto">{n.section}</span>
-            <span aria-hidden="true">·</span>
-            <span>{relativeTime(n.updated, new Date())}</span>
-            {n.openActions > 0 ? (
-              <span className={styles.noteActions}>
-                <span className={styles.noteActionsMark} aria-hidden="true" />
-                {plural(n.openActions, "open action")}
-              </span>
-            ) : null}
-          </span>
-        </li>
+        <NoteItem key={n.path} note={n} />
       ))}
       {notes.length > 12 ? (
         <li className={styles.noteMore}>
@@ -734,6 +785,43 @@ function LinkedNotes({ notes }: { notes: NoteMeta[] }) {
         </li>
       ) : null}
     </ul>
+  );
+}
+
+const REMOVE_SOURCE_TIP = "Moves this source back to Untracked so it stops counting here; Undo is offered.";
+
+/** One source: a session or repo counting toward the project; right-click offers Move to Untracked. */
+function SourceItem({ kind, name, onRemove }: { kind: DetectedProject["kind"]; name: string; onRemove: () => void }) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  /** The row is about to leave: when it holds focus, move it to the next Remove button or Add source. */
+  const remove = () => {
+    const row = rowRef.current;
+    const box = row?.closest("[data-sources]");
+    const others = [...(box?.querySelectorAll<HTMLElement>("[data-part=remove-source]") ?? [])].filter((b) => !row?.contains(b));
+    handOffFocus(row, others[0] ?? box?.querySelector<HTMLElement>("[aria-haspopup=listbox]"));
+    onRemove();
+  };
+  const menu = useMenuRegion(() => ({
+    title: displayName(name),
+    items: [{ label: "Move to Untracked", tip: REMOVE_SOURCE_TIP, onSelect: remove }],
+  }));
+  return (
+    <li ref={rowRef} className={styles.source} data-row-menu="" {...menu}>
+      <KindIcon kind={kind} />
+      <span className={styles.sourceName} dir="auto" title={name}>
+        {name}
+      </span>
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<CloseIcon />}
+        className={styles.sourceRemove}
+        aria-label={`Remove ${name} from this project`}
+        tip={REMOVE_SOURCE_TIP}
+        data-part="remove-source"
+        onClick={remove}
+      />
+    </li>
   );
 }
 
@@ -791,28 +879,7 @@ function Sources({ project, store }: { project: Project; store: ProjectsStore })
               <h3 className={partStyles.kicker}>{g.title}</h3>
               <ul className={styles.sourceList}>
                 {g.names.map((name) => (
-                  <li key={name} className={styles.source}>
-                    <KindIcon kind={g.kind} />
-                    <span className={styles.sourceName} dir="auto" title={name}>
-                      {name}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      icon={<CloseIcon />}
-                      className={styles.sourceRemove}
-                      aria-label={`Remove ${name} from this project`}
-                      tip="Moves this source back to Untracked so it stops counting here; Undo is offered."
-                      data-part="remove-source"
-                      onClick={(e) => {
-                        const row = e.currentTarget.closest("li");
-                        const box = e.currentTarget.closest("[data-sources]");
-                        const others = [...(box?.querySelectorAll<HTMLElement>("[data-part=remove-source]") ?? [])].filter((b) => !row?.contains(b));
-                        handOffFocus(row, others[0] ?? box?.querySelector<HTMLElement>("[aria-haspopup=listbox]"));
-                        void remove(g.kind, name);
-                      }}
-                    />
-                  </li>
+                  <SourceItem key={name} kind={g.kind} name={name} onRemove={() => void remove(g.kind, name)} />
                 ))}
               </ul>
             </div>

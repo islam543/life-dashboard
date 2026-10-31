@@ -4,9 +4,11 @@ import type { Area, Snapshot } from "../../../shared/types";
 import { tileLayoutId, useDetailTrigger } from "../context/DetailContext";
 import type { SnapshotResult } from "../hooks/useSnapshot";
 import { MOTION } from "../hooks/useReducedMotion";
+import type { MenuSection } from "../lib/contextMenu";
 import { workTabFromLayoutId, type WorkTab } from "../lib/detailRows";
 import { relativeTime, sourceLabel, type SourceKey } from "../lib/format";
 import { Button } from "./Button";
+import { useMenuRegion } from "./ContextMenu";
 import { EmptyState } from "./EmptyState";
 import { SkeletonCards, SkeletonChart, SkeletonRows, SkeletonTiles } from "./Skeleton";
 import { StatusDot } from "./StatusDot";
@@ -26,6 +28,10 @@ import styles from "./Panel.module.css";
 // layoutId tileLayoutId(area, key) on the panel so it expands into the overlay (see DetailContext).
 // `fit` (ultrawide only): the panel takes its parent's height and its body scrolls when the content is
 // taller, so a view can fill one screen without the page scrolling (Home at 1920px and up).
+// `menu` (opt-in) gives the panel a right-click section named after its title: Retry when it failed,
+// then the panel's own items, then Open details when it has a detail view. `menu` alone gives only
+// those automatic items; a list adds the panel's own (Re-run, Show this month). Every item must
+// match a control the panel already shows.
 
 export type PanelState = "loading" | "empty" | "error" | "not_connected" | "ok";
 export type PanelSkeleton = "rows" | "chart" | "tiles" | "cards";
@@ -60,6 +66,8 @@ export interface PanelProps {
   tone?: "default" | "ai";
   /** At 1920px and wider: fill the parent's height and scroll the body inside it. No effect below. */
   fit?: boolean;
+  /** Right-click section: true for Retry and Open details only, or the panel's own items to add. Off by default. */
+  menu?: true | MenuSection["items"];
   className?: string;
   bodyClassName?: string;
 }
@@ -91,6 +99,8 @@ function ExpandIcon() {
   );
 }
 
+const RETRY_TIP = "Tries loading this panel's data again; the rest of the page stays as it is.";
+
 function StateBody(props: PanelProps & { titleText: string }) {
   const { state, message, hint, onRetry, retrying, retryTip, notice, skeleton, children, titleText } = props;
   switch (state) {
@@ -118,7 +128,7 @@ function StateBody(props: PanelProps & { titleText: string }) {
               loading={retrying}
               loadingLabel="Retrying"
               className={styles.retry}
-              tip={retryTip ?? "Tries loading this panel's data again; the rest of the page stays as it is."}
+              tip={retryTip ?? RETRY_TIP}
             >
               Retry
             </Button>
@@ -188,9 +198,30 @@ function PanelTitle({ id, title, detail }: { id: string; title: string; detail: 
   );
 }
 
-function DetailShell({ detail, ...rest }: { detail: { area: Area; key?: string } } & Omit<ShellProps, "motionProps">) {
+/** The panel's right-click section, or null when the panel did not opt in (see `menu`). */
+function panelSection(props: PanelProps, openDetails?: () => void): MenuSection | null {
+  const { menu, title, state, onRetry, retrying, retryTip, detail } = props;
+  if (!menu) return null;
+  return {
+    title,
+    items: [
+      state === "error" && onRetry
+        ? {
+            label: retrying ? "Retrying" : "Retry",
+            onSelect: onRetry,
+            disabled: retrying ? "Already retrying; the panel updates when it finishes." : false,
+            tip: retryTip ?? RETRY_TIP,
+          }
+        : null,
+      ...(menu === true ? [] : menu),
+      detail && openDetails ? { label: "Open details", onSelect: openDetails, tip: detailTip(detail.area, detail.key) } : null,
+    ],
+  };
+}
+
+function DetailShell({ detail, panel, ...rest }: { detail: { area: Area; key?: string } } & Omit<ShellProps, "motionProps">) {
   const trigger = useDetailTrigger(detail.area, detail.key);
-  return <Shell {...rest} motionProps={trigger.motionProps} />;
+  return <Shell {...rest} panel={panel} motionProps={trigger.motionProps} openDetails={trigger.open} />;
 }
 
 interface ShellProps {
@@ -198,10 +229,14 @@ interface ShellProps {
   titleId: string;
   busy: boolean;
   children: ReactNode;
+  /** The panel's props, read when it is right-clicked. */
+  panel: PanelProps;
   motionProps?: ReturnType<typeof useDetailTrigger>["motionProps"];
+  openDetails?: () => void;
 }
 
-function Shell({ className, titleId, busy, children, motionProps }: ShellProps) {
+function Shell({ className, titleId, busy, children, panel, motionProps, openDetails }: ShellProps) {
+  const menu = useMenuRegion(() => panelSection(panel, openDetails));
   return (
     <motion.section
       className={className}
@@ -209,6 +244,7 @@ function Shell({ className, titleId, busy, children, motionProps }: ShellProps) 
       aria-busy={busy || undefined}
       style={{ borderRadius: PANEL_RADIUS }}
       {...motionProps}
+      {...menu}
     >
       {children}
     </motion.section>
@@ -246,11 +282,11 @@ export function Panel(props: PanelProps) {
   );
 
   return detail ? (
-    <DetailShell detail={detail} className={classes} titleId={titleId} busy={state === "loading"}>
+    <DetailShell detail={detail} panel={props} className={classes} titleId={titleId} busy={state === "loading"}>
       {inner}
     </DetailShell>
   ) : (
-    <Shell className={classes} titleId={titleId} busy={state === "loading"}>
+    <Shell panel={props} className={classes} titleId={titleId} busy={state === "loading"}>
       {inner}
     </Shell>
   );

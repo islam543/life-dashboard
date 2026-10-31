@@ -25,11 +25,16 @@ export interface NewNoteDialogProps {
   sections: NoteSection[];
   /** Section picked when the dialog opens. */
   initialSection: string;
+  /**
+   * Template picked when the dialog opens ("New meeting note here" in the right-click menu). It then
+   * stays when the section changes, as if picked by hand. Null or absent: the template follows the section.
+   */
+  initialTemplate?: NoteTemplate | null;
   onCancel: () => void;
   onCreated: (note: Note) => void;
 }
 
-export function NewNoteDialog({ open, sections, initialSection, onCancel, onCreated }: NewNoteDialogProps) {
+export function NewNoteDialog({ open, sections, initialSection, initialTemplate, onCancel, onCreated }: NewNoteDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -57,8 +62,8 @@ export function NewNoteDialog({ open, sections, initialSection, onCancel, onCrea
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setTitle("");
       setSection(initialSection);
-      setTemplate(defaultTemplate(initialSection));
-      setTemplateTouched(false);
+      setTemplate(initialTemplate ?? defaultTemplate(initialSection));
+      setTemplateTouched(!!initialTemplate);
       setTitleError(null);
       setFailure(null);
       setBusy(false);
@@ -69,7 +74,7 @@ export function NewNoteDialog({ open, sections, initialSection, onCancel, onCrea
       dialog.close();
       if (opener.current?.isConnected) opener.current.focus();
     }
-    // Only the open flag reopens the form; the section is read at that moment.
+    // Only the open flag reopens the form; the section and template are read at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

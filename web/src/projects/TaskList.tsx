@@ -8,9 +8,11 @@ import { dayKey, plural } from "../lib/format";
 import { LIMITS, sortTasks, taskDueInfo, taskProgress } from "../lib/projects";
 import { parseDayKey } from "../lib/timeAgg";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { EmptyState } from "../ui/EmptyState";
 import { StatusDot } from "../ui/StatusDot";
-import { ChevronIcon, PlusIcon, TrashIcon } from "./icons";
+import { clickIn } from "./actions";
+import { ChevronIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
 import { InlineText } from "./InlineText";
 import { DueBadge, focusWhenReady, handOffFocus, partStyles, ProgressBar } from "./parts";
 import { useToasts } from "./Toasts";
@@ -21,6 +23,8 @@ import styles from "./TaskList.module.css";
 // its check, the text is struck through, and the task slides down to Done a moment later. Click a
 // task's text to edit it, its date to change it. Delete hides the task at once and shows a 5 s Undo;
 // the server delete runs when that time is up (or when you leave the page).
+// Right-click a task: Mark done (or not done), Edit task, Set due date, Delete task, each running
+// the same handler as the row's own control.
 // Long lists: the first 50 open tasks and the first 30 done ones render, with a Show all.
 
 const OPEN_FIRST = 50;
@@ -31,6 +35,11 @@ const SETTLE_MS = 650;
 /** Hover help on a new task's controls until the server has saved it. */
 const PENDING_TIP = "Works once this new task finishes saving, in a moment.";
 const SET_DUE_TIP = "Sets a due date; Needs you flags the task 3 days ahead while the project is Active.";
+const CHANGE_DUE_TIP = "Changes the due date; Enter saves, Esc cancels, an empty date clears it.";
+const DONE_TIP = "Marks the task done; it moves to Done a moment later.";
+const REOPEN_TIP = "Reopens the task and moves it back to the open list.";
+const EDIT_TIP = "Edits the task; Enter saves, Esc cancels.";
+const DELETE_TIP = "Deletes the task; Undo in the message or Ctrl+Z brings it back within 5 seconds.";
 
 function patchTask(s: ProjectsState, projectId: string, taskId: string, patch: Partial<ProjectTask>): ProjectsState {
   return {
@@ -237,6 +246,7 @@ export function TaskList({ project, store, now }: { project: Project; store: Pro
           <input
             ref={inputRef}
             id={`task-${uid}-text`}
+            data-part="new-task"
             className={`${partStyles.input} ${styles.addText}`}
             value={text}
             dir="auto"
@@ -366,8 +376,32 @@ function TaskRow({
 }) {
   const uid = useId().replace(/:/g, "");
   const checkId = `task-${uid}-check`;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const off = pending ? PENDING_TIP : false;
+  const menu = useMenuRegion(() => ({
+    title: task.text,
+    items: [
+      { label: task.done ? "Mark not done" : "Mark done", tip: task.done ? REOPEN_TIP : DONE_TIP, disabled: off, onSelect: onToggle },
+      { label: "Edit task", icon: <PencilIcon />, tip: EDIT_TIP, onSelect: () => clickIn(rowRef.current, "[data-part=edit-text]") },
+      {
+        label: task.due ? "Change due date" : "Set due date",
+        tip: task.due ? CHANGE_DUE_TIP : SET_DUE_TIP,
+        disabled: off,
+        onSelect: () => clickIn(rowRef.current, "[data-part=due]"),
+      },
+      { label: "Delete task", icon: <TrashIcon />, danger: true, tip: DELETE_TIP, disabled: off, onSelect: onDelete },
+    ],
+  }));
   return (
-    <div className={styles.row} data-task-id={task.id} data-done={task.done || undefined} data-pending={pending || undefined}>
+    <div
+      ref={rowRef}
+      className={styles.row}
+      data-task-id={task.id}
+      data-done={task.done || undefined}
+      data-pending={pending || undefined}
+      data-row-menu=""
+      {...menu}
+    >
       <span className={styles.check}>
         <input
           id={checkId}
@@ -376,13 +410,7 @@ function TaskRow({
           disabled={pending}
           onChange={onToggle}
           aria-label={task.text}
-          data-tip={
-            pending
-              ? PENDING_TIP
-              : task.done
-                ? "Reopens the task and moves it back to the open list."
-                : "Marks the task done; it moves to Done a moment later."
-          }
+          data-tip={pending ? PENDING_TIP : task.done ? REOPEN_TIP : DONE_TIP}
         />
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
           <rect className={styles.box} x="1.5" y="1.5" width="15" height="15" rx="4" />
@@ -399,7 +427,7 @@ function TaskRow({
           onSave={onSaveText}
           className={styles.textValue}
           quietButton
-          tip="Edits the task; Enter saves, Esc cancels."
+          tip={EDIT_TIP}
         />
       </span>
       <DueEditor due={task.due} done={task.done} now={now} taskText={task.text} onSave={onSaveDue} disabled={pending} />
@@ -410,7 +438,7 @@ function TaskRow({
         className={styles.delete}
         data-part="delete"
         aria-label={`Delete task: ${task.text}`}
-        tip={pending ? PENDING_TIP : "Deletes the task; Undo in the message or Ctrl+Z brings it back within 5 seconds."}
+        tip={pending ? PENDING_TIP : DELETE_TIP}
         onClick={onDelete}
         disabled={pending}
       />
@@ -511,10 +539,11 @@ function DueEditor({
         ref={buttonRef}
         type="button"
         className={styles.dueButton}
+        data-part="due"
         data-empty={!info || undefined}
         disabled={disabled}
         aria-label={info ? `Due ${info.label}. Change the due date of: ${taskText}` : `Set a due date for: ${taskText}`}
-        data-tip={disabled ? PENDING_TIP : info ? "Changes the due date; Enter saves, Esc cancels, an empty date clears it." : SET_DUE_TIP}
+        data-tip={disabled ? PENDING_TIP : info ? CHANGE_DUE_TIP : SET_DUE_TIP}
         onClick={() => {
           handled.current = false;
           setDraft(due ?? "");

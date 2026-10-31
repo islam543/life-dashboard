@@ -14,6 +14,7 @@ import {
 import { MOTION, useReducedMotion } from "../hooks/useReducedMotion";
 import { ULTRAWIDE_QUERY, useMediaQuery } from "../notes/useMediaQuery";
 import { useSnapshot } from "../hooks/useSnapshot";
+import type { MenuSection } from "../lib/contextMenu";
 import { areaLabel, dayKey, formatMinutes, plural } from "../lib/format";
 import { projectHash } from "../lib/route";
 import {
@@ -26,8 +27,10 @@ import {
   type TimeRange,
 } from "../lib/timeAgg";
 import linkStyles from "../projects/ProjectLink.module.css";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { CountUp } from "../ui/CountUp";
 import { Panel, panelFromSource } from "../ui/Panel";
+import { followLink, openItem } from "./linkMenu";
 import styles from "./ProjectTimeBars.module.css";
 
 // Time by project: sorted horizontal bars of Claude Code session time, this week or this month.
@@ -35,6 +38,8 @@ import styles from "./ProjectTimeBars.module.css";
 // #/projects/<id>); untracked names and anything past the top 8 fold into "Other"; hidden names are
 // left out. Until the server has a registry it groups by detected name. Bars grow in on first load
 // and glide to their new length when the period changes. Labels left, values right-aligned in mono.
+// Right-click a tracked bar for Open project; the panel for the other period, Show all projects and
+// Open details.
 //
 // This file also holds small chart helpers the week timeline and the year heatmap reuse:
 // useElementWidth, useStoredChoice, Segmented (one-of-N toggle) and ChartTooltip. Candidates for ui/.
@@ -342,6 +347,20 @@ function Bar({ fraction, index, firstDraw, other, capped }: BarProps) {
   );
 }
 
+const PROJECT_TIP = "Opens this project's page with its tasks, notes and time.";
+
+/** One bar's row. A tracked project offers Open project on right-click, like its name link. */
+function BarItem({ row, onEnter, children }: { row: BarRow; onEnter: (row: BarRow, li: HTMLLIElement) => void; children: ReactNode }) {
+  const menu = useMenuRegion(() =>
+    row.projectId ? { title: row.label, items: [openItem(projectHash(row.projectId), PROJECT_TIP)] } : null,
+  );
+  return (
+    <li {...menu} className={[styles.row, row.isOther ? styles.other : ""].join(" ")} onPointerEnter={(e) => onEnter(row, e.currentTarget)}>
+      {children}
+    </li>
+  );
+}
+
 function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number; range: TimeRange; daysSoFar: number }) {
   const [hostRef, hostWidth] = useElementWidth<HTMLDivElement>();
   const [tip, setTip] = useState<TipData | null>(null);
@@ -383,11 +402,7 @@ function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number
     <div ref={hostRef} className={styles.host} onPointerLeave={() => setTip(null)}>
       <ol className={styles.list} aria-label={`Claude Code time per project, ${period}`}>
         {rows.map((row, i) => (
-          <li
-            key={row.key}
-            className={[styles.row, row.isOther ? styles.other : ""].join(" ")}
-            onPointerEnter={(e) => showTip(row, e.currentTarget)}
-          >
+          <BarItem key={row.key} row={row} onEnter={showTip}>
             <span className={styles.rank} aria-hidden="true">
               {row.isOther ? "+" : String(i + 1).padStart(2, "0")}
             </span>
@@ -414,7 +429,7 @@ function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number
               , {percent(row.minutes, total)} of {period}
               {row.isOther ? `, ${otherWhat(row)}: ${listNames(row.members, 12)}` : ""}
             </span>
-          </li>
+          </BarItem>
         ))}
       </ol>
       <ChartTooltip tip={tip} hostWidth={hostWidth} />
@@ -455,6 +470,15 @@ export function ProjectTimeBars() {
         : "Time shows here after your first Claude Code session of the month.",
   });
   const showToggle = status.state === "ok" || status.state === "empty";
+  const other = RANGES.find((r) => r.value !== range);
+  const menu: MenuSection["items"] = [
+    showToggle && other ? { label: `Show this ${other.value}`, onSelect: () => setRange(other.value), tip: other.tip } : null,
+    {
+      label: "Show all projects",
+      onSelect: () => followLink(projectHash()),
+      tip: "Opens the Projects board with every tracked project, its tasks and time.",
+    },
+  ];
 
   return (
     <Panel
@@ -462,6 +486,7 @@ export function ProjectTimeBars() {
       {...status}
       skeleton="chart"
       detail={{ area: "work", key: "time" }}
+      menu={menu}
       meta={status.state === "ok" ? `${formatMinutes(total)} total` : undefined}
       action={showToggle ? <Segmented label="Period" options={RANGES} value={range} onChange={setRange} /> : undefined}
     >

@@ -24,6 +24,7 @@ import {
   type HeatGrid,
   type HeatStats,
 } from "../lib/timeAgg";
+import type { MenuSection } from "../lib/contextMenu";
 import { CountUp } from "../ui/CountUp";
 import { Panel, panelFromSource } from "../ui/Panel";
 import { ChartTooltip, Segmented, useElementWidth, useStoredChoice, type SegmentedOption, type TipData } from "./ProjectTimeBars";
@@ -35,6 +36,7 @@ import styles from "./YearHeatmap.module.css";
 // Keyboard: one tab stop; arrows move a day (up/down) or a week (left/right), Home/End go to the
 // ends of the row, Ctrl+Home/End to the first and last day; Enter opens the metric's detail view.
 // Narrow screens: the grid scrolls inside its own box and starts scrolled to the newest weeks.
+// Right-click the panel to switch to another metric or open the metric's details.
 
 type Metric = "work" | "commits" | "sleep" | "workouts";
 
@@ -45,6 +47,14 @@ const METRICS: readonly SegmentedOption<Metric>[] = [
   { value: "workouts", label: "Workouts", tip: "Colours each day by workout minutes, from your evening check-ins." },
 ];
 const METRIC_VALUES = METRICS.map((m) => m.value);
+
+/** Right-click labels for the metric switch: what the grid shows once picked. */
+const SHOW_METRIC: Record<Metric, string> = {
+  work: "Show work time",
+  commits: "Show commits",
+  sleep: "Show sleep",
+  workouts: "Show workouts",
+};
 
 interface StatSpec {
   label: string;
@@ -475,10 +485,17 @@ export function YearHeatmap() {
     if (first && first !== grid.cells[0]) note = `Session logs start ${shortDay(first.date)}.`;
   }
 
+  const menu: MenuSection["items"] = METRICS.filter((m) => m.value !== metric).map((m) => ({
+    label: SHOW_METRIC[m.value],
+    onSelect: () => setMetric(m.value),
+    tip: m.tip,
+  }));
+
   return (
     <Panel
       title="Last 52 weeks"
       {...status}
+      menu={menu}
       skeleton="chart"
       detail={{ area: def.area, key: "year" }}
       action={<Segmented label="Metric" options={METRICS} value={metric} onChange={setMetric} />}

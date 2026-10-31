@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
-import type { Snapshot, SourceStatus } from "../../../shared/types";
+import type { Area, Snapshot, SourceStatus } from "../../../shared/types";
 import { useCheckin } from "../context/CheckinContext";
+import { tileLayoutId, useDetail } from "../context/DetailContext";
 import { useSnapshot } from "../hooks/useSnapshot";
 import { MOTION } from "../hooks/useReducedMotion";
 import {
@@ -14,10 +15,12 @@ import {
   statusLabel,
   type SourceKey,
 } from "../lib/format";
-import { noteHash, projectHash, toHash, type View } from "../lib/route";
+import { noteHash, parseHash, projectHash, toHash, type View } from "../lib/route";
 import { setTipsEnabled, useTipsEnabled } from "../lib/tips";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
+import { detailTip } from "../ui/Panel";
 import { StatusDot, toneForSource } from "../ui/StatusDot";
 import styles from "./Header.module.css";
 
@@ -33,6 +36,24 @@ const VIEWS: readonly { key: View; href: string; label: string; tip: string }[] 
 ];
 
 const USER_NAME = "Islam";
+
+// Right-click menus here: the view switch offers "Go to" the other views (the current one is left out
+// unless a project or note is open in it); a source dot offers the details that source feeds. Refresh,
+// Check in, theme and hover help come from the menu's "everywhere" section, so they are not repeated.
+
+/**
+ * The details each source feeds, for its dot's right-click menu. Work keys pick the tab without
+ * matching a Home tile, so the view opens in place instead of growing out of an unrelated tile.
+ */
+const SOURCE_DETAIL: Record<SourceKey, { area: Area; key?: string; label: string }> = {
+  github: { area: "work", key: "pull-requests", label: "Open pull requests" },
+  jira: { area: "work", key: "issues", label: "Open Jira issues" },
+  claudeSessions: { area: "work", key: "sessions", label: "Open time by project" },
+  learning: { area: "learning", label: "Open learning details" },
+  checkins: { area: "personal", label: "Open personal details" },
+  calendar: { area: "calendar", label: "Open agenda" },
+  email: { area: "email", label: "Open emails" },
+};
 
 /** Current time, re-read every `everyMs` so "Updated 3 min ago" and the greeting stay true. */
 function useNow(everyMs: number): Date {
@@ -96,6 +117,57 @@ function sourceSummary(sources: Snapshot["sources"]): { text: string; tone: "ok"
   return { text: parts.join(", "), tone };
 }
 
+/** One source's dot. Hover or focus shows its status; right-click offers the details it feeds. */
+function SourceDot({
+  sourceKey,
+  state,
+  describedBy,
+  onShow,
+  onHide,
+}: {
+  sourceKey: SourceKey;
+  state: Snapshot["sources"][SourceKey] | undefined;
+  describedBy: string | undefined;
+  onShow: (key: SourceKey) => void;
+  onHide: () => void;
+}) {
+  const { openDetail } = useDetail();
+  const tone = state ? toneForSource(state.status) : "idle";
+  const name = sourceLabel(sourceKey);
+  const menu = useMenuRegion(() => {
+    const d = SOURCE_DETAIL[sourceKey];
+    return {
+      title: name,
+      items: [
+        {
+          label: d.label,
+          onSelect: () => openDetail(d.area, d.key ? tileLayoutId(d.area, d.key) : undefined),
+          tip: detailTip(d.area, d.key),
+        },
+      ],
+    };
+  });
+  return (
+    <li {...menu}>
+      <button
+        type="button"
+        className={styles.source}
+        data-status={state?.status ?? "loading"}
+        aria-describedby={describedBy}
+        aria-label={`${name}: ${state ? statusLabel(state.status) : "loading"}`}
+        onMouseEnter={() => onShow(sourceKey)}
+        onFocus={() => onShow(sourceKey)}
+        onBlur={onHide}
+      >
+        <StatusDot tone={tone} size={9} glow={tone !== "off" && tone !== "idle"} />
+        <span className={styles.sourceName} aria-hidden="true">
+          {name}
+        </span>
+      </button>
+    </li>
+  );
+}
+
 function SourceStatusBar({ sources, now }: { sources: Snapshot["sources"] | null; now: Date }) {
   const [active, setActive] = useState<SourceKey | null>(null);
   const tipId = useId();
@@ -129,30 +201,16 @@ function SourceStatusBar({ sources, now }: { sources: Snapshot["sources"] | null
     >
       <span className={`label ${styles.sourcesLabel}`}>Sources</span>
       <ul className={styles.sourceList}>
-        {SOURCE_KEYS.map((key) => {
-          const state = sources?.[key];
-          const tone = state ? toneForSource(state.status) : "idle";
-          const name = sourceLabel(key);
-          return (
-            <li key={key}>
-              <button
-                type="button"
-                className={styles.source}
-                data-status={state?.status ?? "loading"}
-                aria-describedby={active === key ? tipId : undefined}
-                aria-label={`${name}: ${state ? statusLabel(state.status) : "loading"}`}
-                onMouseEnter={() => show(key)}
-                onFocus={() => show(key)}
-                onBlur={hideSoon}
-              >
-                <StatusDot tone={tone} size={9} glow={tone !== "off" && tone !== "idle"} />
-                <span className={styles.sourceName} aria-hidden="true">
-                  {name}
-                </span>
-              </button>
-            </li>
-          );
-        })}
+        {SOURCE_KEYS.map((key) => (
+          <SourceDot
+            key={key}
+            sourceKey={key}
+            state={sources?.[key]}
+            describedBy={active === key ? tipId : undefined}
+            onShow={show}
+            onHide={hideSoon}
+          />
+        ))}
       </ul>
       {summary ? (
         <span className={styles.summary} data-tone={summary.tone}>
@@ -237,6 +295,25 @@ export function Header({ route }: { route: Route }) {
   const data = snap.data;
   const checkedIn = data?.personal.checkedInToday ?? false;
 
+  // Read at right-click time: inside a project or note, its view's tab still leads back to the top level.
+  const viewMenu = useMenuRegion(() => {
+    const here = toHash(parseHash(window.location.hash));
+    return {
+      title: "Views",
+      items: VIEWS.map((v) =>
+        v.href === here
+          ? null
+          : {
+              label: `Go to ${v.label}`,
+              onSelect: () => {
+                window.location.hash = v.href;
+              },
+              tip: v.tip,
+            },
+      ),
+    };
+  });
+
   return (
     <header className={styles.header}>
       <div className={styles.top}>
@@ -287,7 +364,7 @@ export function Header({ route }: { route: Route }) {
       </div>
 
       <div className={styles.bar}>
-        <nav className={styles.views} aria-label="View">
+        <nav {...viewMenu} className={styles.views} aria-label="View">
           {VIEWS.map(({ key, href, label, tip }) => (
             <a key={key} href={href} className={styles.view} aria-current={route === key ? "page" : undefined} data-tip={tip}>
               {route === key ? (

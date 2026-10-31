@@ -30,6 +30,7 @@ import {
   type PrQueue,
   type StreakSummary,
 } from "../lib/kpis";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { CountUp } from "../ui/CountUp";
 import { detailTip, Panel, panelFromSource } from "../ui/Panel";
 import { Sparkline } from "../ui/Sparkline";
@@ -43,6 +44,7 @@ import styles from "./KpiTiles.module.css";
 // Three sources keep per-day history (sessions, commits, check-ins), so those tiles get a Sparkline
 // with this week's stretch shaded. Jira, PRs and the streak have no history in the snapshot, so their
 // picture is a true breakdown instead: issue status split, PR age strip, streak against the best.
+// Right-click a tile for Open details (the same view its title button opens).
 
 /** Same as --radius-md, as a number so `motion` can correct it during the layout animation. */
 const TILE_RADIUS = 10;
@@ -437,9 +439,15 @@ function Tile({ model, index }: { model: TileModel; index: number }) {
     avail.kind === "ok"
       ? `${model.spoken}${caveat ? ` ${caveat}` : ""}`
       : `${PROBLEM[avail.kind].title}. ${avail.message}`;
+  const tip = (avail.kind === "ok" ? model.tip : undefined) ?? detailTip(model.area, model.key);
+  const menu = useMenuRegion(() => ({
+    title: model.label,
+    items: [{ label: "Open details", onSelect: trigger.open, tip }],
+  }));
 
   return (
     <motion.li
+      {...menu}
       className={styles.item}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -457,7 +465,7 @@ function Tile({ model, index }: { model: TileModel; index: number }) {
               className={styles.hit}
               onClick={trigger.open}
               aria-describedby={descId}
-              data-tip={(avail.kind === "ok" ? model.tip : undefined) ?? detailTip(model.area, model.key)}
+              data-tip={tip}
             >
               {model.label}
               <span className="sr-only">, open {detailTitle(model.area)} details</span>
@@ -519,6 +527,7 @@ export function KpiTiles() {
   return (
     <Panel
       title="Key numbers"
+      menu
       state={status.state}
       message={status.message}
       hint={status.hint}

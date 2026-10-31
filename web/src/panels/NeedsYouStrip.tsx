@@ -1,9 +1,10 @@
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { NeedsYouItem } from "../../../shared/types";
+import type { Area, NeedsYouItem } from "../../../shared/types";
+import { useDetail } from "../context/DetailContext";
 import { MOTION } from "../hooks/useReducedMotion";
 import { useSnapshot } from "../hooks/useSnapshot";
-import { areaLabel, sourceLabel } from "../lib/format";
+import { areaLabel, detailTitle, sourceLabel } from "../lib/format";
 import {
   dueLabel,
   dueRemaining,
@@ -15,9 +16,11 @@ import {
   rankNeedsYou,
   urgencyCounts,
 } from "../lib/kpis";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { EmptyState } from "../ui/EmptyState";
-import { Panel, panelFromSource } from "../ui/Panel";
+import { detailTip, Panel, panelFromSource } from "../ui/Panel";
 import { StatusDot, toneForUrgency } from "../ui/StatusDot";
+import { openItem, opensIn } from "./linkMenu";
 import styles from "./NeedsYouStrip.module.css";
 
 // Full-width strip at the top of Home: "what is on fire". One card per snapshot.needsYou item,
@@ -25,6 +28,8 @@ import styles from "./NeedsYouStrip.module.css";
 // never rests on colour alone. Cards new since the last visit pulse once and keep a "New" tag.
 // Past 8 items the header says "+N more not shown" as plain text: the server caps the list, so those
 // items are not on this page to link to.
+// Right-click a card: open its link (in Jira, on GitHub, or the project here) and open its area's
+// details, the same places the card link and the Key numbers tiles go.
 
 const SEEN_KEY = "life-dashboard:needs-you-seen";
 
@@ -103,40 +108,20 @@ function ExternalIcon() {
   );
 }
 
-/** Readable names for the sites links go to. Anything else shows its host name. */
-const SITE_NAMES: readonly [RegExp, string][] = [
-  [/(^|\.)github\.com$/, "GitHub"],
-  [/(^|\.)atlassian\.net$/, "Jira"],
-  [/(^|\.)gitlab\.com$/, "GitLab"],
-  [/^calendar\.google\.com$/, "Google Calendar"],
-  [/^mail\.google\.com$/, "Gmail"],
-];
-
-/**
- * Hover help for a link to a source item, without the full stop: "Opens it on GitHub in a new tab",
- * "Opens it on the Projects page". Shared by Needs you and Next moves.
- */
-export function opensIn(url: string): string {
-  if (url.startsWith("#")) {
-    if (url.startsWith("#/projects")) return "Opens it on the Projects page of this dashboard";
-    if (url.startsWith("#/notes")) return "Opens the note in the Notes view of this dashboard";
-    return "Opens it here in the dashboard";
-  }
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    const site = SITE_NAMES.find(([re]) => re.test(host))?.[1] ?? host;
-    return `Opens it on ${site} in a new tab`;
-  } catch {
-    return "Opens it in a new tab";
-  }
-}
-
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-function NeedCard({ item, index, now, fresh }: { item: NeedsYouItem; index: number; now: Date; fresh: boolean }) {
+interface NeedCardProps {
+  item: NeedsYouItem;
+  index: number;
+  now: Date;
+  fresh: boolean;
+  onOpenArea: (area: Area) => void;
+}
+
+function NeedCard({ item, index, now, fresh, onOpenArea }: NeedCardProps) {
   const due = dueLabel(item.dueAt, now);
   const left = dueRemaining(item.dueAt, now);
   const overdue = due?.startsWith("Overdue") ?? false;
@@ -145,9 +130,17 @@ function NeedCard({ item, index, now, fresh }: { item: NeedsYouItem; index: numb
   const tip = item.url
     ? `${opensIn(item.url)}${item.dueAt ? `; due ${fullDate.format(new Date(item.dueAt))}` : ""}.`
     : undefined;
+  const menu = useMenuRegion(() => ({
+    title: item.title,
+    items: [
+      openItem(item.url, tip),
+      { label: `Open ${detailTitle(item.area)} details`, onSelect: () => onOpenArea(item.area), tip: detailTip(item.area) },
+    ],
+  }));
 
   return (
     <motion.li
+      {...menu}
       className={[styles.card, styles[item.urgency], fresh ? styles.fresh : ""].filter(Boolean).join(" ")}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
@@ -234,6 +227,7 @@ function AllClear({ unchecked }: { unchecked: string[] }) {
 
 export function NeedsYouStrip() {
   const snap = useSnapshot();
+  const { openDetail } = useDetail();
   const now = useNow(60_000);
   const data = snap.data;
 
@@ -269,7 +263,7 @@ export function NeedsYouStrip() {
     body = (
       <ul className={styles.cards} role="list">
         {shown.map((item, i) => (
-          <NeedCard key={item.id} item={item} index={i} now={now} fresh={fresh.has(item.id)} />
+          <NeedCard key={item.id} item={item} index={i} now={now} fresh={fresh.has(item.id)} onOpenArea={openDetail} />
         ))}
       </ul>
     );
@@ -308,6 +302,7 @@ export function NeedsYouStrip() {
     <Panel
       title="Needs you"
       fit
+      menu
       state={state}
       message={status.message}
       hint={status.hint}

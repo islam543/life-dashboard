@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { Note, NoteMeta, NotesIndex } from "../../../shared/types";
+import type { Note, NoteMeta, NotesIndex, NoteTemplate } from "../../../shared/types";
 import { errorMessage } from "../api";
 import { notesApi } from "../api/notes";
 import { useSnapshot } from "../hooks/useSnapshot";
+import type { MenuSection } from "../lib/contextMenu";
 import { formatNumber } from "../lib/format";
 import {
   ALL_NOTES,
@@ -20,15 +21,17 @@ import {
 } from "../lib/notes";
 import { noteHash, parseHash } from "../lib/route";
 import { ConfirmDialog } from "../notes/ConfirmDialog";
-import { BackIcon, PlusIcon } from "../notes/icons";
+import { copyText, fullPath } from "../notes/filePaths";
+import { BackIcon, CopyIcon, PlusIcon, TrashIcon } from "../notes/icons";
 import { NewNoteDialog } from "../notes/NewNoteDialog";
-import { NoteEditor, type EditorHandle } from "../notes/NoteEditor";
+import { NoteEditor, type EditorAsk, type EditorHandle } from "../notes/NoteEditor";
 import { NoteList } from "../notes/NoteList";
 import { SectionTree, type SectionTreeHandle } from "../notes/SectionTree";
 import { useMediaQuery } from "../notes/useMediaQuery";
 import { useNotesIndex } from "../notes/useNotesIndex";
 import { useProjectOptions } from "../notes/useProjectOptions";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { EmptyState } from "../ui/EmptyState";
 import { Panel } from "../ui/Panel";
 import styles from "./Notes.module.css";
@@ -46,11 +49,23 @@ export interface NotesProps {
 // any in-app link first saves what is pending; if that fails, a dialog asks before leaving. Closing
 // the tab with unsaved text asks the browser to warn. After every write the shared snapshot is
 // re-read so Needs you and project note counts catch up.
+//
+// Right-click menus (shortcuts to the visible controls): sections in the tree (notes/SectionTree), a
+// note in the list (Open, Link to project, Copy path, Delete note), the list around the notes (New
+// note, New meeting note) and the editor (notes/NoteEditor). Link to project and Delete note open the
+// note first, through the same save-before-leaving guard as a click, then move to its Project field
+// or ask with the editor's own delete question.
 
 const PHONE_QUERY = "(max-width: 719px)";
 const VIEW_KEY = "life-dashboard:notes-view";
 const SNAPSHOT_DEBOUNCE_MS = 4_000;
 const LEAVE_FLUSH_TIMEOUT_MS = 5_000;
+
+/** A request for the editor to run once a note has opened (see NoteEditor's `ask`). */
+interface PendingAsk {
+  path: string;
+  ask: EditorAsk;
+}
 
 interface ViewMemory {
   selected: string;
@@ -115,9 +130,17 @@ export function Notes({ path }: NotesProps) {
   const [selected, setSelected] = useState(memory.selected);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(memory.expanded));
   const [phonePane, setPhonePane] = useState<"sections" | "notes">("notes");
-  const [newOpen, setNewOpen] = useState(false);
+  /** The New note form, open for a section and maybe a template; null when closed. */
+  const [newNote, setNewNote] = useState<{ section: string; template: NoteTemplate | null } | null>(null);
   const [justCreated, setJustCreated] = useState<string | null>(null);
-  const [leave, setLeave] = useState<{ href: string; reason: string | null; title: string } | null>(null);
+  const [leave, setLeave] = useState<{
+    href: string;
+    reason: string | null;
+    title: string;
+    /** What the editor does once the next note opens, if the person leaves anyway. */
+    then: PendingAsk | null;
+  } | null>(null);
+  const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
   const [top, setTop] = useState<number | null>(null);
   /** Bumped to reopen the same path from scratch (a note re-created under its old file name). */
   const [editorEpoch, setEditorEpoch] = useState(0);
@@ -241,6 +264,34 @@ export function Notes({ path }: NotesProps) {
   // Leaving the open note by any in-app link (list, header, Needs you): save first; if that fails, ask.
   const notesRef = useRef(notes);
   notesRef.current = notes;
+
+  /**
+   * Goes to `href`, saving the open note first; when that save fails, asks before leaving. `then` is
+   * handed to the editor of the note that opens, only once the person has actually left.
+   */
+  const leaveTo = useCallback(
+    (href: string, then: PendingAsk | null = null) => {
+      const go = () => {
+        if (then) setPendingAsk(then);
+        window.location.hash = href;
+      };
+      const editor = editorRef.current;
+      if (!path || !editor || !editor.hasUnsaved()) {
+        go();
+        return;
+      }
+      void withTimeout(editor.flush(), LEAVE_FLUSH_TIMEOUT_MS).then((ok) => {
+        if (ok) {
+          go();
+          return;
+        }
+        const title = notesRef.current.find((n) => n.path === path)?.title;
+        setLeave({ href, reason: editor.failure(), title: title || "this note", then });
+      });
+    },
+    [path],
+  );
+
   useEffect(() => {
     if (!path) return;
     const onClick = (e: MouseEvent) => {
@@ -250,21 +301,25 @@ export function Notes({ path }: NotesProps) {
       if (!link || !href || !href.startsWith("#/") || link.getAttribute("target") === "_blank") return;
       const route = parseHash(href);
       if (route.view === "notes" && route.path === path) return;
-      const editor = editorRef.current;
-      if (!editor || !editor.hasUnsaved()) return;
+      if (!editorRef.current?.hasUnsaved()) return;
       e.preventDefault();
-      void withTimeout(editor.flush(), LEAVE_FLUSH_TIMEOUT_MS).then((ok) => {
-        if (ok) {
-          window.location.hash = href;
-          return;
-        }
-        const title = notesRef.current.find((n) => n.path === path)?.title;
-        setLeave({ href, reason: editor.failure(), title: title || "this note" });
-      });
+      leaveTo(href);
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
+  }, [path, leaveTo]);
+
+  // A request for a note that never opened (another note was picked first) is dropped, so it can't
+  // fire later by surprise.
+  useEffect(() => {
+    setPendingAsk((pending) => (pending && pending.path !== path ? null : pending));
   }, [path]);
+
+  /** Opens a note (unless it is open already), then has its editor run `ask`. */
+  const openAndAsk = (target: string, ask: EditorAsk) => {
+    if (target === path) setPendingAsk({ path: target, ask });
+    else leaveTo(noteHash(target), { path: target, ask });
+  };
 
   /* Section actions ------------------------------------------------------------------------------ */
 
@@ -329,8 +384,20 @@ export function Notes({ path }: NotesProps) {
     } catch (err) {
       return errorMessage(err);
     }
-    setSelected(parentPath(p));
+    // Deleted from its right-click menu while another section is open: that one stays open.
+    setSelected((s) => (isWithin(s, p) ? parentPath(p) : s));
     return null;
+  };
+
+  /**
+   * Opens the New note form, the same one the New note button opens. `section` ALL_NOTES picks the
+   * default section; a template, when given, is picked instead of the section's own.
+   */
+  const startNewNote = (section: string, template: NoteTemplate | null = null) => {
+    const target = defaultNewNoteSection(sections, section);
+    if (!target) return;
+    void editorRef.current?.flush();
+    setNewNote({ section: target, template });
   };
 
   /* Note events ---------------------------------------------------------------------------------- */
@@ -347,7 +414,7 @@ export function Notes({ path }: NotesProps) {
 
   const onCreated = (note: Note) => {
     upsert(note);
-    setNewOpen(false);
+    setNewNote(null);
     setJustCreated(note.path);
     const section = noteSection(note);
     if (!isWithin(section, current)) setSelected(section);
@@ -372,6 +439,73 @@ export function Notes({ path }: NotesProps) {
     if (note.path === path) setEditorEpoch((n) => n + 1);
     else window.location.replace(noteHash(note.path));
   };
+
+  /* Right-click menus ------------------------------------------------------------------------------ */
+
+  const noSections = sections.length === 0;
+  const noSectionsReason = "Notes live in sections; add one with New section first.";
+
+  const noteMenu = (note: NoteMeta): MenuSection => {
+    const open = note.path === path;
+    const dir = data?.dir ?? "";
+    return {
+      title: note.title || "Untitled note",
+      items: [
+        {
+          label: "Open",
+          onSelect: () => leaveTo(noteHash(note.path)),
+          disabled: open ? "Already open in the editor." : false,
+          tip: "Opens this note in the editor; the note open now saves first.",
+        },
+        {
+          label: note.projectId ? "Change project" : "Link to project",
+          onSelect: () => openAndAsk(note.path, "project"),
+          tip: open
+            ? "Moves to the note's Project field; picking a project there saves at once."
+            : "Opens the note and moves to its Project field; picking a project there saves at once.",
+        },
+        dir
+          ? {
+              label: "Copy path",
+              icon: <CopyIcon />,
+              onSelect: () => void copyText(fullPath(dir, note.path)),
+              tip: "Copies the note's full file path, so you can find it in File Explorer or Obsidian.",
+            }
+          : null,
+        {
+          label: "Delete note",
+          icon: <TrashIcon />,
+          danger: true,
+          onSelect: () => openAndAsk(note.path, "delete"),
+          tip: open
+            ? "Asks first, then moves the file to .trash in your notes folder; nothing is erased."
+            : "Opens the note and asks first, then moves the file to .trash in your notes folder.",
+        },
+      ],
+    };
+  };
+
+  const listMenu = useMenuRegion((): MenuSection | null => {
+    if (!data || data.status !== "ok") return null;
+    return {
+      title: sectionLabel(current),
+      items: [
+        {
+          label: "New note",
+          icon: <PlusIcon />,
+          onSelect: () => startNewNote(current),
+          disabled: noSections ? noSectionsReason : false,
+          tip: "Opens a form to name the note and pick its section and template; it saves as markdown.",
+        },
+        {
+          label: "New meeting note",
+          onSelect: () => startNewNote(current, "meeting"),
+          disabled: noSections ? noSectionsReason : false,
+          tip: "Opens the new note form with the Meeting template picked.",
+        },
+      ],
+    };
+  });
 
   /* Render --------------------------------------------------------------------------------------- */
 
@@ -439,11 +573,7 @@ export function Notes({ path }: NotesProps) {
       variant="primary"
       size="sm"
       icon={<PlusIcon />}
-      onClick={() => {
-        if (!newSection) return;
-        void editorRef.current?.flush();
-        setNewOpen(true);
-      }}
+      onClick={() => startNewNote(current)}
       aria-disabled={newSection ? undefined : true}
       aria-describedby={newSection ? undefined : "notes-new-reason"}
       className={newSection ? undefined : styles.inactive}
@@ -482,7 +612,9 @@ export function Notes({ path }: NotesProps) {
       />
     );
   } else {
-    listBody = <NoteList notes={listNotes} section={current} openPath={path} projects={projects.projects} />;
+    listBody = (
+      <NoteList notes={listNotes} section={current} openPath={path} projects={projects.projects} menuFor={noteMenu} />
+    );
   }
 
   return (
@@ -507,11 +639,12 @@ export function Notes({ path }: NotesProps) {
               onCreate={createSection}
               onRename={renameSection}
               onDelete={deleteSection}
+              onNewNote={startNewNote}
             />
           </Panel>
         </div>
 
-        <div className={styles.listPane} ref={listPaneRef}>
+        <div className={styles.listPane} ref={listPaneRef} {...listMenu}>
           {isPhone ? (
             <div className={styles.phoneBar}>
               <button
@@ -567,6 +700,8 @@ export function Notes({ path }: NotesProps) {
               onDeleted={onDeleted}
               onRecreated={onRecreated}
               handleRef={editorRef}
+              ask={pendingAsk?.path === path ? pendingAsk.ask : null}
+              onAskDone={() => setPendingAsk(null)}
             />
           ) : (
             <Panel title="Note" state="ok" className={styles.fill}>
@@ -586,10 +721,11 @@ export function Notes({ path }: NotesProps) {
       </div>
 
       <NewNoteDialog
-        open={newOpen}
+        open={newNote !== null}
         sections={sections}
-        initialSection={newSection ?? ""}
-        onCancel={() => setNewOpen(false)}
+        initialSection={newNote?.section ?? newSection ?? ""}
+        initialTemplate={newNote?.template}
+        onCancel={() => setNewNote(null)}
         onCreated={onCreated}
       />
 
@@ -604,8 +740,11 @@ export function Notes({ path }: NotesProps) {
         onCancel={() => setLeave(null)}
         onConfirm={() => {
           const href = leave?.href;
+          const then = leave?.then ?? null;
           setLeave(null);
-          if (href) window.location.hash = href;
+          if (!href) return;
+          if (then) setPendingAsk(then);
+          window.location.hash = href;
         }}
       >
         <p dir="auto">

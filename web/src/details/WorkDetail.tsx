@@ -8,8 +8,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -48,12 +50,15 @@ import {
   type SortValue,
   type WorkTab,
 } from "../lib/detailRows";
+import type { MenuSection } from "../lib/contextMenu";
 import { formatMinutes, formatNumber, plural, relativeTime } from "../lib/format";
 import { isWaitingOnYou } from "../lib/kpis";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { CountUp } from "../ui/CountUp";
 import { Panel, panelFromSource } from "../ui/Panel";
 import { StatusDot, type StatusTone } from "../ui/StatusDot";
+import { useLinkItems } from "./rowMenu";
 import styles from "./WorkDetail.module.css";
 
 // Work explore view: tabs Jira, Pull requests, CI, Time. Opens on the tab that matches the tile
@@ -63,6 +68,8 @@ import styles from "./WorkDetail.module.css";
 // T11 may not add files, so the parts every detail view shares also live here and are exported:
 // Stagger, TruncText, FilterBar, DataTable, ChartFrame, YAxis, XDayAxis, BarChart.
 // PersonalDetail and CalendarDetail import them. Candidates for details/parts.tsx later.
+// Right-click an issue, pull request or CI run for "Open in ..." and "Copy link" (DataTable rowMenu,
+// details/rowMenu.ts); a failed panel offers Retry.
 
 const cx = (...names: Array<string | false | null | undefined>) => names.filter(Boolean).join(" ");
 
@@ -94,21 +101,24 @@ export function StaggerItem({
   className,
   as = "div",
   style,
+  onContextMenu,
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "li";
   style?: CSSProperties;
+  /** From useMenuRegion, for an item with its own right-click section. */
+  onContextMenu?: (e: ReactMouseEvent) => void;
 }) {
   if (as === "li") {
     return (
-      <motion.li className={className} variants={staggerChild} style={style}>
+      <motion.li className={className} variants={staggerChild} style={style} onContextMenu={onContextMenu}>
         {children}
       </motion.li>
     );
   }
   return (
-    <motion.div className={className} variants={staggerChild} style={style}>
+    <motion.div className={className} variants={staggerChild} style={style} onContextMenu={onContextMenu}>
       {children}
     </motion.div>
   );
@@ -405,6 +415,14 @@ export interface DataTableProps<T> {
   minWidth?: number;
   /** Plural noun for the pager, e.g. "issues". */
   noun: string;
+  /** Right-click section for one row: its links, its edit action. */
+  rowMenu?: (row: T) => MenuSection | null;
+}
+
+/** A table row that offers its own right-click section, on top of the panel's. */
+function TableRow({ menu, ...rest }: ComponentProps<typeof motion.tr> & { menu?: () => MenuSection | null }) {
+  const region = useMenuRegion(() => menu?.() ?? null);
+  return <motion.tr {...rest} {...region} />;
 }
 
 /**
@@ -424,6 +442,7 @@ export function DataTable<T>({
   empty,
   minWidth = 640,
   noun,
+  rowMenu,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<{ column: string; dir: SortDir } | null>(null);
   const [page, setPage] = useState(0);
@@ -513,8 +532,9 @@ export function DataTable<T>({
               view.rows.map((row, i) => {
                 const tone = rowTone?.(row) ?? null;
                 return (
-                  <motion.tr
+                  <TableRow
                     key={rowKey(row)}
+                    menu={rowMenu ? () => rowMenu(row) : undefined}
                     layout={reduced ? false : "position"}
                     layoutDependency={orderKey}
                     initial={reduced ? false : { opacity: 0 }}
@@ -530,7 +550,7 @@ export function DataTable<T>({
                         {c.cell(row)}
                       </td>
                     ))}
-                  </motion.tr>
+                  </TableRow>
                 );
               })
             )}
@@ -1044,6 +1064,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   const hint = status.state === "not_connected" ? "Then restart the dashboard server so it reads the new values." : status.hint;
   const issues = useMemo(() => snap.data?.work.jira ?? [], [snap.data]);
   const shown = useMemo(() => filterRows(issues, filters, jiraField), [issues, filters]);
+  const linkItems = useLinkItems();
 
   const columns: Column<JiraIssue>[] = [
     {
@@ -1122,7 +1143,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   return (
     <Stagger>
       <StaggerItem>
-        <Panel title="Jira issues" {...status} hint={hint} meta={issues.length > 0 ? `${issues.length} open` : undefined} skeleton="rows">
+        <Panel title="Jira issues" {...status} hint={hint} menu meta={issues.length > 0 ? `${issues.length} open` : undefined} skeleton="rows">
           <div className={styles.filtered}>
           <FilterBar
             groups={groups}
@@ -1140,6 +1161,7 @@ function JiraTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
             defaultOrder={sortJiraByUrgency}
             resetKey={JSON.stringify(filters)}
             minWidth={760}
+            rowMenu={(r) => ({ title: `${r.key} ${r.summary}`, items: linkItems(r.url, "Opens this issue in Jira in a new tab.") })}
             rowTone={(r) => {
               const level = dueLevel(r.dueDate, now);
               if (level === "overdue" || level === "today") return "danger";
@@ -1194,6 +1216,7 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   const shown = useMemo(() => filterRows(prs, filters, prField), [prs, filters]);
   const byUrgency = useCallback((rows: readonly PullRequest[]) => sortPrsByUrgency(rows, now), [now]);
   const waiting = prs.filter(isWaitingOnYou).length;
+  const linkItems = useLinkItems();
 
   const columns: Column<PullRequest>[] = [
     {
@@ -1270,6 +1293,7 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
         <Panel
           title="Pull requests"
           {...status}
+          menu
           meta={prs.length > 0 ? `${prs.length} open${waiting > 0 ? `, ${waiting} waiting on you` : ""}` : undefined}
           skeleton="rows"
         >
@@ -1290,6 +1314,10 @@ function PrTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
             defaultOrder={byUrgency}
             resetKey={JSON.stringify(filters)}
             minWidth={720}
+            rowMenu={(r) => ({
+              title: `${repoName(r.repo)} #${r.number} ${r.title}`,
+              items: linkItems(r.url, "Opens this pull request on GitHub in a new tab."),
+            })}
             rowTone={(r) => {
               const tone = prTone(r, now);
               return tone === "danger" ? "danger" : tone === "warn" ? "warn" : null;
@@ -1313,6 +1341,34 @@ const CI_LOOK: Record<CiRun["status"], { tone: StatusTone; text: string; label: 
 
 const CI_SEGMENTS: CiRun["status"][] = ["fail", "pending", "pass"];
 
+const CI_TIP = "Opens this run's log on GitHub in a new tab.";
+
+function CiCard({ run: r, now }: { run: CiRun; now: Date }) {
+  const linkItems = useLinkItems();
+  const look = CI_LOOK[r.status];
+  const menu = useMenuRegion(() => ({ title: repoName(r.repo), items: linkItems(r.url, CI_TIP) }));
+  return (
+    <StaggerItem as="li" className={cx(styles.ciCard, styles[`card_${r.status}`])} {...menu}>
+      <div className={styles.ciHead}>
+        <StatusDot tone={look.tone} size={11} pulse={r.status === "fail"} />
+        <TruncText text={repoName(r.repo)} className={styles.ciRepo} />
+      </div>
+      <p className={styles.ciLine}>
+        <span className={cx(styles.ciState, r.status === "fail" && styles.dangerText)}>{look.text}</span>
+        <span className={cx(styles.muted, styles.ciBranch, "num")}>{r.branch}</span>
+      </p>
+      <p className={styles.ciLine}>
+        <span className={cx(styles.muted, "num")}>{relativeTime(r.at, now)}</span>
+        <a className={styles.ciLink} href={r.url} target="_blank" rel="noopener noreferrer" data-tip={CI_TIP}>
+          Open run
+          <span className="sr-only"> for {repoName(r.repo)} (opens in a new tab)</span>
+          <ExternalIcon />
+        </a>
+      </p>
+    </StaggerItem>
+  );
+}
+
 function CiTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   const reduced = useReducedMotion();
   const status = panelFromSource(snap, "github", {
@@ -1327,7 +1383,7 @@ function CiTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   return (
     <Stagger>
       <StaggerItem>
-        <Panel title="CI on default branches" {...status} meta={runs.length > 0 ? plural(runs.length, "repo") : undefined} skeleton="cards">
+        <Panel title="CI on default branches" {...status} menu meta={runs.length > 0 ? plural(runs.length, "repo") : undefined} skeleton="cards">
           <div className={styles.ciSummary}>
             <div className={styles.ciMeter} role="img" aria-label={CI_SEGMENTS.map((k) => `${counts[k]} ${CI_LOOK[k].label}`).join(", ")}>
               {CI_SEGMENTS.map((k, i) =>
@@ -1353,35 +1409,9 @@ function CiTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
             </ul>
           </div>
           <Stagger as="ul" className={styles.ciGrid}>
-            {runs.map((r) => {
-              const look = CI_LOOK[r.status];
-              return (
-                <StaggerItem as="li" key={`${r.repo}:${r.branch}`} className={cx(styles.ciCard, styles[`card_${r.status}`])}>
-                  <div className={styles.ciHead}>
-                    <StatusDot tone={look.tone} size={11} pulse={r.status === "fail"} />
-                    <TruncText text={repoName(r.repo)} className={styles.ciRepo} />
-                  </div>
-                  <p className={styles.ciLine}>
-                    <span className={cx(styles.ciState, r.status === "fail" && styles.dangerText)}>{look.text}</span>
-                    <span className={cx(styles.muted, styles.ciBranch, "num")}>{r.branch}</span>
-                  </p>
-                  <p className={styles.ciLine}>
-                    <span className={cx(styles.muted, "num")}>{relativeTime(r.at, now)}</span>
-                    <a
-                      className={styles.ciLink}
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-tip="Opens this run's log on GitHub in a new tab."
-                    >
-                      Open run
-                      <span className="sr-only"> for {repoName(r.repo)} (opens in a new tab)</span>
-                      <ExternalIcon />
-                    </a>
-                  </p>
-                </StaggerItem>
-              );
-            })}
+            {runs.map((r) => (
+              <CiCard key={`${r.repo}:${r.branch}`} run={r} now={now} />
+            ))}
           </Stagger>
         </Panel>
       </StaggerItem>
@@ -1408,12 +1438,12 @@ function TimeTab({ snap, now }: { snap: SnapshotResult; now: Date }) {
   return (
     <Stagger className={cx(styles.stack, styles.timeGrid)}>
       <StaggerItem>
-        <Panel title="Time by project, last 30 days" {...timeStatus} skeleton="chart">
+        <Panel title="Time by project, last 30 days" {...timeStatus} menu skeleton="chart">
           {snap.data ? <ProjectTime data={snap.data} now={now} /> : null}
         </Panel>
       </StaggerItem>
       <StaggerItem>
-        <Panel title="Commits per day, last 30 days" {...commitStatus} skeleton="chart">
+        <Panel title="Commits per day, last 30 days" {...commitStatus} menu skeleton="chart">
           {snap.data ? <Commits data={snap.data} now={now} /> : null}
         </Panel>
       </StaggerItem>

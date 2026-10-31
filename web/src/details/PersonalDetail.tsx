@@ -344,6 +344,8 @@ function Pips({ value }: { value: number }) {
   );
 }
 
+const EDIT_TIP = "Opens this day's check-in to change it; saving replaces the old answers.";
+
 function CheckinTable({ checkins, onEdit, today }: { checkins: Checkin[]; onEdit: (date: string) => void; today: string }) {
   const rows = useMemo(() => recentCheckins(checkins), [checkins]);
   const columns: Column<Checkin>[] = [
@@ -403,7 +405,7 @@ function CheckinTable({ checkins, onEdit, today }: { checkins: Checkin[]; onEdit
           size="sm"
           onClick={() => onEdit(r.date)}
           className={styles.editButton}
-          tip="Opens this day's check-in to change it; saving replaces the old answers."
+          tip={EDIT_TIP}
         >
           Edit<span className="sr-only"> check-in for {weekdayLabel.format(parseDay(r.date))}</span>
         </Button>
@@ -420,6 +422,10 @@ function CheckinTable({ checkins, onEdit, today }: { checkins: Checkin[]; onEdit
       rowKey={(r) => r.date}
       defaultSort={{ column: "date", dir: "desc" }}
       minWidth={840}
+      rowMenu={(r) => ({
+        title: weekdayLabel.format(parseDay(r.date)),
+        items: [{ label: "Edit check-in", onSelect: () => onEdit(r.date), tip: EDIT_TIP }],
+      })}
     />
   );
 }
@@ -508,22 +514,22 @@ export function PersonalDetail(_props: DetailProps) {
 
       <Stagger className={styles.grid}>
         <StaggerItem className={styles.trendsCell}>
-          <Panel title="Sleep, energy and mood" {...status} meta={`Last ${range} days`} skeleton="chart">
+          <Panel title="Sleep, energy and mood" {...status} menu meta={`Last ${range} days`} skeleton="chart">
             <Trends checkins={checkins} range={range} now={now} />
           </Panel>
         </StaggerItem>
         <StaggerItem className={styles.cell}>
-          <Panel title="Workouts" {...status} skeleton="chart">
+          <Panel title="Workouts" {...status} menu skeleton="chart">
             <Workouts checkins={checkins} range={range} now={now} />
           </Panel>
         </StaggerItem>
         <StaggerItem className={styles.cell}>
-          <Panel title="Spend per week" {...status} meta="QAR" skeleton="chart">
+          <Panel title="Spend per week" {...status} menu meta="QAR" skeleton="chart">
             <Spend checkins={checkins} range={range} now={now} />
           </Panel>
         </StaggerItem>
         <StaggerItem className={styles.tableCell}>
-          <Panel title="Check-in log" {...status} meta={checkins.length > 0 ? plural(recentCheckins(checkins).length, "day") : undefined} skeleton="rows">
+          <Panel title="Check-in log" {...status} menu meta={checkins.length > 0 ? plural(recentCheckins(checkins).length, "day") : undefined} skeleton="rows">
             <CheckinTable checkins={checkins} onEdit={(date) => openCheckin(date)} today={today} />
           </Panel>
         </StaggerItem>

@@ -1,8 +1,10 @@
 import { AnimatePresence } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Project } from "../../../shared/types";
+import type { Project, ProjectStatus } from "../../../shared/types";
 import { projectHash } from "../lib/route";
+import { linkedNoteCount, useDeleteProject } from "../projects/actions";
 import { Board, boardStatus } from "../projects/Board";
+import { DeleteProjectDialog } from "../projects/DeleteProjectDialog";
 import { revealInScroller, useFitHeight } from "../projects/fit";
 import { NewProjectDialog } from "../projects/NewProjectDialog";
 import { ProjectDetail } from "../projects/ProjectDetail";
@@ -26,9 +28,24 @@ export interface ProjectsProps {
 //
 // Data: projectsApi through useProjectsStore (every write answers the fresh ProjectsState, then the
 // snapshot is re-read so Home's tiles, the charts and Needs you catch up), notesApi for linked notes.
+//
+// Right-click menus (ui/ContextMenu.tsx) live in the board, the tray and the project page. This view
+// holds what they share: the New project form (a lane's menu opens it with that lane's status
+// picked), the delete confirm for a card's Delete project, and Add task, which opens a project with
+// its New task field focused.
 
 /** Board scroll (px) above which opening a project fades it in instead of morphing the card. */
 const MORPH_MAX_SCROLL = 120;
+/** How long a deleted card takes to leave its lane before focus moves to its neighbour. */
+const CARD_EXIT_MS = 450;
+
+/** The card next to `id`'s card in its lane (or the lane before it), else the page: where focus goes when it leaves. */
+function neighbourOf(id: string): HTMLElement | null {
+  const card = document.querySelector<HTMLElement>(`[data-project-card="${CSS.escape(id)}"]`);
+  const item = card?.closest("li");
+  const next = (item?.nextElementSibling ?? item?.previousElementSibling)?.querySelector<HTMLElement>("[data-project-card]");
+  return next ?? document.getElementById("main");
+}
 
 /** "now", re-read every minute so countdowns stay true while the page is open. */
 function useNow(everyMs = 60_000): Date {
@@ -59,7 +76,10 @@ function ProjectsView({ id }: ProjectsProps) {
   const store = useProjectsStore();
   const toasts = useToasts();
   const now = useNow();
-  const [newOpen, setNewOpen] = useState(false);
+  /** The New project form's starting status while it is open; null when closed. */
+  const [newStatus, setNewStatus] = useState<ProjectStatus | null>(null);
+  /** A card menu's Add task: open that project with its New task field focused. */
+  const [startTasks, setStartTasks] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const lastId = useRef<string | null>(id);
   const boardScroll = useRef(0);
@@ -91,6 +111,7 @@ function ProjectsView({ id }: ProjectsProps) {
       window.scrollTo({ top: 0 });
       return;
     }
+    setStartTasks(null);
     if (prev) {
       window.scrollTo({ top: boardScroll.current });
       setHighlight(prev);
@@ -119,23 +140,75 @@ function ProjectsView({ id }: ProjectsProps) {
     toasts.push({ message: `Deleted ${project.name}. Its sources are back in Untracked; linked notes keep their files.` });
   };
 
+  // A card's Delete project: the same confirm and delete as the project page's Delete button. The
+  // card then leaves its lane; focus goes to its neighbour instead of being lost.
+  const cardDelete = useDeleteProject(store, (project) => {
+    const next = neighbourOf(project.id);
+    onDeleted(project);
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      (next?.isConnected ? next : document.getElementById("main"))?.focus({ preventScroll: true });
+    }, CARD_EXIT_MS);
+  });
+  const deleting = cardDelete.project
+    ? (store.state?.projects.find((p) => p.id === cardDelete.project?.id) ?? cardDelete.project)
+    : null;
+
+  const addTask = (project: Project) => {
+    setStartTasks(project.id);
+    window.location.hash = projectHash(project.id);
+  };
+
   const trayStatus = { ...boardStatus(store), notice: undefined };
 
   return (
     <div ref={viewRef} className={styles.view}>
       {id ? (
-        <ProjectDetail key={id} id={id} store={store} now={now} onDeleted={onDeleted} morph={canMorph.current} />
+        <ProjectDetail
+          key={id}
+          id={id}
+          store={store}
+          now={now}
+          onDeleted={onDeleted}
+          morph={canMorph.current}
+          startAt={startTasks === id ? "tasks" : undefined}
+        />
       ) : (
         <div className={styles.board}>
           <div className={styles.boardMain}>
-            <Board store={store} now={now} onNewProject={() => setNewOpen(true)} highlight={highlight} />
+            <Board
+              store={store}
+              now={now}
+              onNewProject={(status) => setNewStatus(status ?? "active")}
+              highlight={highlight}
+              onAddTask={addTask}
+              onDeleteProject={cardDelete.ask}
+            />
           </div>
           <aside className={styles.tray} aria-label="Untracked names">
             <UntrackedTray store={store} status={trayStatus} onTracked={setHighlight} />
           </aside>
         </div>
       )}
-      <NewProjectDialog open={newOpen} store={store} onClose={() => setNewOpen(false)} onCreated={onCreated} />
+      <NewProjectDialog
+        open={newStatus !== null}
+        initialStatus={newStatus ?? undefined}
+        store={store}
+        onClose={() => setNewStatus(null)}
+        onCreated={onCreated}
+      />
+      {deleting && !id ? (
+        <DeleteProjectDialog
+          open={cardDelete.open}
+          project={deleting}
+          noteCount={linkedNoteCount(store.notes.notes, deleting.id)}
+          busy={cardDelete.busy}
+          error={cardDelete.error}
+          onCancel={cardDelete.cancel}
+          onConfirm={() => void cardDelete.confirm()}
+        />
+      ) : null}
     </div>
   );
 }

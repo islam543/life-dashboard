@@ -1,0 +1,123 @@
+/* Right-click menu (ui/ContextMenu.tsx). Same raised surface as tips and dialogs. Tokens only. */
+
+.menu {
+  position: fixed;
+  /* Undo the browser's popover defaults (centred, inset 0, Canvas colors). */
+  inset: auto;
+  margin: 0;
+  z-index: var(--z-tooltip);
+  min-width: 220px;
+  max-width: 320px;
+  max-height: calc(100dvh - 2 * var(--space-2));
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-raised);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  animation: menu-in var(--dur-fast) var(--ease-out) both;
+}
+
+.group {
+  display: grid;
+}
+
+.separator {
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--divider);
+}
+
+.title {
+  padding: var(--space-1-5) var(--space-3) var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  outline: none;
+}
+
+.item:focus-visible,
+.item:focus,
+.item:hover:not([aria-disabled]) {
+  background: var(--bg-hover);
+}
+
+.item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.item[data-danger] {
+  color: var(--danger);
+}
+
+.item[aria-disabled] {
+  color: var(--text-faint);
+}
+
+.icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.icon :global(svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.item[data-danger] .icon {
+  color: inherit;
+}
+
+.label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: none;
+  }
+}

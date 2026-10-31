@@ -26,6 +26,9 @@ Open backlog = files at this level. Finished tickets move to `done/`. Plan: `../
 | T20 | Ultrawide Home, shell, details, hover help | frontend-developer | foundation | 7 | done |
 | T21 | Ultrawide Projects, hover help | frontend-developer | foundation | 7 | done |
 | T22 | Ultrawide Notes and Life map, hover help | frontend-developer | foundation | 7 | done |
+| T23 | Right-click menus: Home, header, details | frontend-developer | foundation | 8 | done |
+| T24 | Right-click menus: Projects | frontend-developer | foundation | 8 | done |
+| T25 | Right-click menus: Notes and Life map | frontend-developer | foundation | 8 | done |
 
 ## Assumptions taken (say if any is wrong)
 

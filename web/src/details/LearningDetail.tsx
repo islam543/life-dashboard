@@ -206,6 +206,7 @@ export function LearningDetail(_props: DetailProps) {
         <Panel
           title="Current cycle"
           {...cycleStatus}
+          menu
           meta={cycle && cycle.steps.length > 0 ? `${stepsDone} of ${cycle.steps.length} steps` : undefined}
           skeleton="rows"
         >
@@ -221,12 +222,12 @@ export function LearningDetail(_props: DetailProps) {
         </Panel>
       </StaggerItem>
       <StaggerItem className={styles.streakCell}>
-        <Panel title="Streak" {...streakStatus} skeleton="rows">
+        <Panel title="Streak" {...streakStatus} menu skeleton="rows">
           {learning ? <Streak streak={learning.streak} /> : null}
         </Panel>
       </StaggerItem>
       <StaggerItem className={styles.agendaCell}>
-        <Panel title="Life agenda" {...agendaStatus} skeleton="rows">
+        <Panel title="Life agenda" {...agendaStatus} menu skeleton="rows">
           {learning ? <Agenda items={learning.agendaThisMonth} /> : null}
         </Panel>
       </StaggerItem>

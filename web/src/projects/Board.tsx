@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useId, useMemo, useState } from "react";
+import type { Project, ProjectStatus } from "../../../shared/types";
 import { MOTION, useReducedMotion } from "../hooks/useReducedMotion";
 import { formatMinutes, plural, relativeTime } from "../lib/format";
 import {
@@ -10,6 +11,7 @@ import {
   buildCards,
   cardDescription,
   groupCards,
+  STATUS_GROUP_LABEL,
   type AreaFilter,
   type ProjectCardModel,
   type StatusGroup,
@@ -17,12 +19,25 @@ import {
 import { projectHash } from "../lib/route";
 import { Segmented, useStoredChoice } from "../panels/ProjectTimeBars";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { CountUp } from "../ui/CountUp";
 import { EmptyState } from "../ui/EmptyState";
 import { Panel, type PanelStatus } from "../ui/Panel";
 import { Sparkline } from "../ui/Sparkline";
-import { ChevronIcon, NoteIcon, PlusIcon } from "./icons";
+import {
+  canCopyLinks,
+  copyProjectLink,
+  meetingNoteOff,
+  useMeetingNote,
+  useProjectSave,
+  useTargetMenuRegion,
+  type MeetingNote,
+} from "./actions";
+import { revealInScroller } from "./fit";
+import { ChevronIcon, NoteIcon, PlusIcon, TrashIcon } from "./icons";
+import { areaChoices, laneAdd, MOVE_TIP, moveLabel, moveTargets } from "./menus";
 import { AreaChip, DueBadge, ProgressBar } from "./parts";
+import { useToasts } from "./Toasts";
 import type { ProjectsStore } from "./useProjects";
 import styles from "./Board.module.css";
 
@@ -31,6 +46,11 @@ import styles from "./Board.module.css";
 // Paused, Ideas, and Done collapsed). Each card is one link to the project, and morphs into it.
 // Ultrawide (>=1920px): the readout and the filter share one row and the status groups become lanes
 // side by side, each scrolling inside itself; empty and folded lanes stay narrow.
+//
+// Right-click (ui/ContextMenu.tsx): a card offers Open, Move to, Add task, New meeting note, Copy link
+// and Delete project; a lane offers its own add (Ideas: Add idea, which opens the form with Idea
+// picked) or Show/Hide done projects; the rest of the board offers New project and the area filter.
+// Every item matches a control on the board or the project's page and runs the same handler.
 
 const NEW_PROJECT_TIP = "Opens a short form for a new project: name, area, status, deadline and sources.";
 
@@ -43,9 +63,42 @@ export const cardLayoutId = (id: string) => `project-card-${id}`;
 export interface BoardProps {
   store: ProjectsStore;
   now: Date;
-  onNewProject: () => void;
+  /** Opens the New project form, with `status` picked when a lane's menu asks for one. */
+  onNewProject: (status?: ProjectStatus) => void;
   /** A project to pulse once (just created or just left). */
   highlight: string | null;
+  /** Card menu, Add task: opens the project with its New task field focused. */
+  onAddTask: (project: Project) => void;
+  /** Card menu, Delete project: opens the same confirm step as the project's Delete button. */
+  onDeleteProject: (project: Project) => void;
+}
+
+/** What a card's right-click menu can do; one set for the whole board. */
+interface CardActions {
+  move: (project: Project, status: ProjectStatus) => void;
+  addTask: (project: Project) => void;
+  note: MeetingNote;
+  /** Null where the page can't reach the clipboard. */
+  copy: ((project: Project) => void) | null;
+  remove: (project: Project) => void;
+}
+
+/** How long a card takes to leave its old lane (exit animation) before focus follows it. */
+const FOLLOW_MS = 450;
+
+/**
+ * After a card changes lane from its menu, keep keyboard focus on it: on the card in its new lane,
+ * or on the Done lane's toggle when it went into the folded Done lane. Only when focus was lost.
+ */
+function followCard(id: string) {
+  window.setTimeout(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    const card = document.querySelector<HTMLElement>(`[data-project-card="${CSS.escape(id)}"]`);
+    const target = card ?? document.querySelector<HTMLElement>('[data-lane="done"] button[aria-expanded]');
+    target?.focus({ preventScroll: true });
+    if (card) revealInScroller(card);
+  }, FOLLOW_MS);
 }
 
 export function boardStatus(store: ProjectsStore): PanelStatus {
@@ -69,34 +122,72 @@ export function boardStatus(store: ProjectsStore): PanelStatus {
   return { state: "loading" };
 }
 
-export function Board({ store, now, onNewProject, highlight }: BoardProps) {
+export function Board(props: BoardProps) {
+  const { store, onNewProject } = props;
   const status = boardStatus(store);
   const count = store.state?.projects.length ?? 0;
+  const [area, setArea] = useStoredChoice<AreaFilter>("life-dashboard:projects-area", AREA_FILTERS, "all");
+  const projects = store.state?.projects;
+  const counts = useMemo(() => areaCounts(projects ?? []), [projects]);
+
+  // The board's own section. On a card it steps aside (the card's menu is long enough), and in a
+  // lane that already offers its own add, New project would repeat it.
+  const menu = useTargetMenuRegion((target) => {
+    if (!store.state || target?.closest("[data-project-card]")) return null;
+    const lane = target?.closest<HTMLElement>("[data-lane]")?.dataset.lane as ProjectStatus | undefined;
+    return {
+      title: "Projects",
+      items: [
+        lane && laneAdd(lane)
+          ? null
+          : { label: "New project", icon: <PlusIcon />, onSelect: () => onNewProject(), tip: NEW_PROJECT_TIP },
+        // The area filter only shows once there are projects.
+        ...(count > 0
+          ? areaChoices(area, counts).map((c) => ({ label: c.label, hint: c.hint, tip: c.tip, onSelect: () => setArea(c.value) }))
+          : []),
+      ],
+    };
+  });
+
   return (
-    <Panel
-      title="Projects"
-      {...status}
-      skeleton="cards"
-      meta={store.state ? `${count} tracked` : undefined}
-      className={styles.panel}
-      bodyClassName={styles.panelBody}
-      action={
-        // With no projects the empty state carries the same button, so the header stays quiet.
-        count > 0 ? (
-          <Button variant="primary" size="sm" icon={<PlusIcon />} onClick={onNewProject} tip={NEW_PROJECT_TIP}>
-            New project
-          </Button>
-        ) : undefined
-      }
-    >
-      {store.state ? <BoardBody store={store} now={now} onNewProject={onNewProject} highlight={highlight} /> : null}
-    </Panel>
+    <div className={styles.region} {...menu}>
+      <Panel
+        title="Projects"
+        {...status}
+        skeleton="cards"
+        meta={store.state ? `${count} tracked` : undefined}
+        className={styles.panel}
+        bodyClassName={styles.panelBody}
+        action={
+          // With no projects the empty state carries the same button, so the header stays quiet.
+          count > 0 ? (
+            <Button variant="primary" size="sm" icon={<PlusIcon />} onClick={() => onNewProject()} tip={NEW_PROJECT_TIP}>
+              New project
+            </Button>
+          ) : undefined
+        }
+      >
+        {store.state ? <BoardBody {...props} area={area} setArea={setArea} counts={counts} /> : null}
+      </Panel>
+    </div>
   );
 }
 
-function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
+function BoardBody({
+  store,
+  now,
+  onNewProject,
+  highlight,
+  onAddTask,
+  onDeleteProject,
+  area,
+  setArea,
+  counts,
+}: BoardProps & { area: AreaFilter; setArea: (a: AreaFilter) => void; counts: Record<AreaFilter, number> }) {
   const state = store.state!;
-  const [area, setArea] = useStoredChoice<AreaFilter>("life-dashboard:projects-area", AREA_FILTERS, "all");
+  const toasts = useToasts();
+  const { saveOrToast } = useProjectSave(store);
+  const note = useMeetingNote(store);
   const today = now.toDateString();
   const cards = useMemo(
     () => buildCards(state, store.notes.notes, now),
@@ -104,11 +195,32 @@ function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state, store.notes.notes, today],
   );
-  const counts = useMemo(() => areaCounts(state.projects), [state.projects]);
   const shownArea = area;
   const groups = useMemo(() => groupCards(cards, shownArea), [cards, shownArea]);
   const shownCards = groups.flatMap((g) => g.cards);
   const summary = boardSummary(shownCards);
+
+  const actions: CardActions = {
+    // Same save as the Status control on the project's page. The card leaves for another lane (or the
+    // folded Done lane), so a message says where it went and offers Undo.
+    move: (project, status) => {
+      if (status === project.status) return;
+      const from = project.status;
+      saveOrToast(project.id, { status }, "status").then(
+        () =>
+          toasts.push({
+            message: `Moved ${project.name} to ${STATUS_GROUP_LABEL[status]}.`,
+            action: { label: "Undo", onAction: () => void saveOrToast(project.id, { status: from }, "status").catch(() => undefined) },
+          }),
+        () => undefined,
+      );
+      followCard(project.id);
+    },
+    addTask: onAddTask,
+    note,
+    copy: canCopyLinks() ? (project) => copyProjectLink(project, toasts.push) : null,
+    remove: onDeleteProject,
+  };
 
   if (state.projects.length === 0) {
     return (
@@ -120,7 +232,7 @@ function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
             : "Projects add up time, tasks and deadlines across your Claude sessions and GitHub repos. Start one from scratch."
         }
         action={
-          <Button variant="primary" icon={<PlusIcon />} onClick={onNewProject} tip={NEW_PROJECT_TIP}>
+          <Button variant="primary" icon={<PlusIcon />} onClick={() => onNewProject()} tip={NEW_PROJECT_TIP}>
             New project
           </Button>
         }
@@ -166,7 +278,16 @@ function BoardBody({ store, now, onNewProject, highlight }: BoardProps) {
             }
           />
         ) : (
-          groups.map((g) => <Group key={g.status} group={g} highlight={highlight} anyShown={shownCards.length > 0} />)
+          groups.map((g) => (
+            <Group
+              key={g.status}
+              group={g}
+              highlight={highlight}
+              anyShown={shownCards.length > 0}
+              onNewProject={onNewProject}
+              actions={actions}
+            />
+          ))
         )}
       </div>
     </div>
@@ -215,7 +336,21 @@ const EMPTY_LINE: Record<StatusGroup["status"], string> = {
   done: "Nothing finished yet.",
 };
 
-function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: string | null; anyShown: boolean }) {
+const FOLD_TIP = { open: "Hides the finished projects again.", closed: "Shows the projects you marked Done." };
+
+function Group({
+  group,
+  highlight,
+  anyShown,
+  onNewProject,
+  actions,
+}: {
+  group: StatusGroup;
+  highlight: string | null;
+  anyShown: boolean;
+  onNewProject: (status?: ProjectStatus) => void;
+  actions: CardActions;
+}) {
   const headingId = `group-${useId().replace(/:/g, "")}`;
   const listId = `${headingId}-list`;
   const collapsible = group.status === "done";
@@ -223,10 +358,27 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
   const expanded = !collapsible || open;
   const n = group.cards.length;
 
+  // The lane's section: its own add (Ideas: Add idea, with Idea picked in the form), or the Done
+  // lane's fold toggle. Also shown under a card's section, since the card sits in this lane.
+  const add = laneAdd(group.status);
+  const menu = useMenuRegion(() => ({
+    title: group.label,
+    items: [
+      add ? { label: add.label, icon: <PlusIcon />, tip: add.tip, onSelect: () => onNewProject(add.status) } : null,
+      collapsible && n > 0
+        ? {
+            label: expanded ? "Hide done projects" : "Show done projects",
+            tip: expanded ? FOLD_TIP.open : FOLD_TIP.closed,
+            onSelect: () => setOpen((v) => !v),
+          }
+        : null,
+    ],
+  }));
+
   if (n === 0) {
     if (group.status !== "active" || !anyShown) {
       return (
-        <section className={styles.groupEmpty} aria-labelledby={headingId}>
+        <section className={styles.groupEmpty} aria-labelledby={headingId} data-lane={group.status} {...menu}>
           <h3 id={headingId} className={styles.groupTitle}>
             {group.label} <span className={styles.groupCount}>0</span>
           </h3>
@@ -243,6 +395,8 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
       data-status={group.status}
       data-empty={n === 0 || undefined}
       data-folded={!expanded || undefined}
+      data-lane={group.status}
+      {...menu}
     >
       <h3 id={headingId} className={styles.groupTitle}>
         {collapsible ? (
@@ -252,7 +406,7 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
             aria-expanded={expanded}
             aria-controls={listId}
             onClick={() => setOpen((v) => !v)}
-            data-tip={expanded ? "Hides the finished projects again." : "Shows the projects you marked Done."}
+            data-tip={expanded ? FOLD_TIP.open : FOLD_TIP.closed}
           >
             <span className={styles.chevron} data-open={expanded || undefined}>
               <ChevronIcon />
@@ -281,7 +435,7 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
                 exit={{ opacity: 0, scale: 0.98, transition: { duration: MOTION.fast } }}
                 transition={{ duration: MOTION.base, ease: MOTION.easeOut, delay: Math.min(i, 10) * MOTION.stagger }}
               >
-                <ProjectCard card={card} index={i} highlight={highlight === card.project.id} />
+                <ProjectCard card={card} index={i} highlight={highlight === card.project.id} actions={actions} />
               </motion.li>
             ))}
           </AnimatePresence>
@@ -293,13 +447,66 @@ function Group({ group, highlight, anyShown }: { group: StatusGroup; highlight: 
   );
 }
 
-export function ProjectCard({ card, index, highlight }: { card: ProjectCardModel; index: number; highlight: boolean }) {
+const OPEN_TIP = "Opens this project to edit its tasks, goals, deadline and sources.";
+
+export function ProjectCard({
+  card,
+  index,
+  highlight,
+  actions,
+}: {
+  card: ProjectCardModel;
+  index: number;
+  highlight: boolean;
+  actions: CardActions;
+}) {
   const reduced = useReducedMotion();
   const uid = useId().replace(/:/g, "");
   const nameId = `card-${uid}-name`;
   const descId = `card-${uid}-desc`;
   const { project, deadline, progress, weekMinutes, series, openActions, lastNoteAt } = card;
   const hasTime = series.some((v) => v > 0);
+
+  // The card's section. Each item matches a control: the card itself (Open), the Status, New task,
+  // New meeting note and Delete controls on the project's page, the link's own Copy link address.
+  const menu = useMenuRegion(() => ({
+    title: project.name,
+    items: [
+      { label: "Open", onSelect: () => (window.location.hash = projectHash(project.id)), tip: OPEN_TIP },
+      ...moveTargets(project.status).map((s) => ({
+        label: moveLabel(s),
+        tip: MOVE_TIP[s],
+        onSelect: () => actions.move(project, s),
+      })),
+      {
+        label: "Add task",
+        icon: <PlusIcon />,
+        tip: "Opens this project with the New task field ready to type in.",
+        onSelect: () => actions.addTask(project),
+      },
+      {
+        label: "New meeting note",
+        icon: <NoteIcon />,
+        tip: actions.note.tip,
+        disabled: meetingNoteOff(actions.note),
+        onSelect: () => void actions.note.start(project),
+      },
+      actions.copy
+        ? {
+            label: "Copy link",
+            tip: "Copies this project's address, to paste into a note or a message.",
+            onSelect: () => actions.copy?.(project),
+          }
+        : null,
+      {
+        label: "Delete project",
+        icon: <TrashIcon />,
+        danger: true,
+        tip: "Asks first, then deletes the project; its sources go back to Untracked.",
+        onSelect: () => actions.remove(project),
+      },
+    ],
+  }));
 
   return (
     <motion.a
@@ -312,9 +519,10 @@ export function ProjectCard({ card, index, highlight }: { card: ProjectCardModel
       data-tone={deadline?.tone === "danger" ? "danger" : undefined}
       data-highlight={highlight || undefined}
       data-project-card={project.id}
-      data-tip="Opens this project to edit its tasks, goals, deadline and sources."
+      data-tip={OPEN_TIP}
       aria-labelledby={nameId}
       aria-describedby={descId}
+      {...menu}
     >
       <span className={styles.cardTop}>
         <AreaChip area={project.area} />

@@ -27,6 +27,7 @@ import type { Snapshot } from "../../../shared/types";
 import { useDetail } from "../context/DetailContext";
 import { MOTION, useReducedMotion } from "../hooks/useReducedMotion";
 import { useSnapshot } from "../hooks/useSnapshot";
+import type { MenuAction, MenuSection } from "../lib/contextMenu";
 import { areaLabel, detailTitle } from "../lib/format";
 import {
   buildLifeGraph,
@@ -52,8 +53,10 @@ import {
   type SimLink,
   type SimNode,
 } from "../lib/lifeGraph";
+import { projectHash } from "../lib/route";
 import { ULTRAWIDE_QUERY, useMediaQuery } from "../notes/useMediaQuery";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { Panel, panelFromSource } from "../ui/Panel";
 import { Skeleton } from "../ui/Skeleton";
 import { StatusDot, toneForUrgency } from "../ui/StatusDot";
@@ -71,6 +74,10 @@ import styles from "./LifeMap.module.css";
 // Ultrawide (1920px and up): the area readout and the legend become a rail on the left, the stage fills
 // the rest of the width and the window's height (no page scroll), and on a stage at least twice as wide as
 // tall the layout switches to "wide", which spreads the areas sideways (lib/lifeGraph orientationFor).
+//
+// Right-click (or the menu key on a focused node): a project node offers Open project (tracked ones) and
+// its area's details, any other node its area's details, and the whole stage Reset view, Zoom in and
+// Zoom out. Each calls what the node click and the view buttons call.
 
 const LABEL_ALPHA = 0.12; // labels fade in once the bloom is mostly done
 const ZOOM_STEP = 1.4;
@@ -396,6 +403,11 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
   const signature = useMemo(() => graphSignature(graph), [graph]);
   const idsKey = useMemo(() => graph.nodes.map((n) => n.id).join("|"), [graph]);
   const nodeById = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
+  /** Registry id of each tracked project's node, for Open project in the right-click menu. */
+  const projectIdByNode = useMemo(
+    () => new Map<string, string>(graph.projects.flatMap((p) => (p.id ? [[`project:${p.key}`, p.id]] : []))),
+    [graph],
+  );
 
   const [view, setView] = useState<ZoomTransform>(zoomIdentity);
   const viewRef = useLatest(view);
@@ -844,13 +856,80 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
 
   const minZoom = k <= ZOOM_EXTENT[0] + 0.001;
   const maxZoom = k >= ZOOM_EXTENT[1] - 0.001;
+
+  // ---- right-click menus ----
+
+  /** The node a right-click landed on, or null for the stage around the nodes. */
+  const menuNodeId = useRef<string | null>(null);
+
+  /** Focus the node first, as a click does, so closing the detail view returns focus to it. */
+  const openNode = (n: LifeNode) => {
+    svgRef.current?.querySelector<SVGGElement>(`[data-node="${CSS.escape(n.id)}"]`)?.focus({ preventScroll: true });
+    activate(n);
+  };
+
+  const nodeMenu = useMenuRegion((): MenuSection | null => {
+    const n = menuNodeId.current ? nodeById.get(menuNodeId.current) : undefined;
+    // The centre only resets the view, which the stage's own section already offers.
+    if (!n || !n.area) return null;
+    const title = detailTitle(n.area);
+    const projectId = n.kind === "project" ? projectIdByNode.get(n.id) : undefined;
+    const details: MenuAction = {
+      label: `Open ${title} details`,
+      onSelect: () => openNode(n),
+      tip: `Opens the ${title} view with the full numbers, the same as clicking this node.`,
+    };
+    return {
+      title: n.label,
+      items: [
+        projectId
+          ? {
+              label: "Open project",
+              onSelect: () => {
+                window.location.hash = projectHash(projectId);
+              },
+              tip: "Goes to this project's page in Projects.",
+            }
+          : null,
+        details,
+      ],
+    };
+  });
+
+  const viewMenu = useMenuRegion(
+    (): MenuSection => ({
+      title: "Life map",
+      items: [
+        {
+          label: "Reset view",
+          icon: <RecenterIcon />,
+          onSelect: resetView,
+          tip: "Fits the whole map in view and puts nodes you dragged back in place.",
+        },
+        {
+          label: "Zoom in",
+          icon: <PlusIcon />,
+          onSelect: () => zoomBy(ZOOM_STEP),
+          disabled: maxZoom ? "The map is at its closest view; zoom out or use Reset view." : false,
+          tip: "Zooms in to spread nodes apart; labels keep their size.",
+        },
+        {
+          label: "Zoom out",
+          icon: <MinusIcon />,
+          onSelect: () => zoomBy(1 / ZOOM_STEP),
+          disabled: minZoom ? "The map is at its widest view; zoom in or use Reset view." : false,
+          tip: "Zooms out to show more of the map; scrolling over the map does the same.",
+        },
+      ],
+    }),
+  );
   const center = screen("center");
   const noProjects = !graph.nodes.some((n) => n.kind === "project" || n.kind === "other");
   const workArea = graph.areas.find((a) => a.area === "work");
 
   return (
     <div className={styles.frame}>
-      <div ref={stageRef} className={styles.stage} data-ready={ready || undefined}>
+      <div ref={stageRef} className={styles.stage} data-ready={ready || undefined} {...viewMenu}>
         {/* Controls come first in the DOM so Tab reaches them before the graph's many nodes. */}
         <div ref={controlsRef} className={styles.controls} role="group" aria-label="Map view">
           {/* aria-disabled, not disabled: the button stays hoverable and focusable so its tip can say why. */}
@@ -901,6 +980,11 @@ function MapStage({ graph, reduced }: { graph: LifeGraph; reduced: boolean }) {
           role="group"
           aria-label={`Life map graph: ${graph.nodes.length} nodes. Tab moves between them.`}
           data-dragging={dragId ? true : undefined}
+          onContextMenu={(e) => {
+            const node = e.target instanceof Element ? e.target.closest("[data-node]") : null;
+            menuNodeId.current = node?.getAttribute("data-node") ?? null;
+            nodeMenu.onContextMenu(e);
+          }}
         >
           <g className={styles.rings} aria-hidden="true">
             {RING_RADII.map((r) => (

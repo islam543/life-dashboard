@@ -42,11 +42,13 @@ const STATUS_TIP: Partial<Record<ProjectStatus, string>> = {
 export interface NewProjectDialogProps {
   open: boolean;
   store: ProjectsStore;
+  /** Status picked when the form opens (a lane's right-click menu: Add idea picks Idea). Default Active. */
+  initialStatus?: ProjectStatus;
   onClose: () => void;
   onCreated: (project: Project) => void;
 }
 
-export function NewProjectDialog({ open, store, onClose, onCreated }: NewProjectDialogProps) {
+export function NewProjectDialog({ open, store, initialStatus, onClose, onCreated }: NewProjectDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const [session, setSession] = useState(0);
   const [wasOpen, setWasOpen] = useState(open);
@@ -64,25 +66,39 @@ export function NewProjectDialog({ open, store, onClose, onCreated }: NewProject
 
   return (
     <dialog ref={ref} className={styles.dialog} aria-labelledby="new-project-title" onClose={onClose}>
-      {open && session > 0 ? <NewProjectForm key={session} store={store} dialogRef={ref} onClose={onClose} onCreated={onCreated} /> : null}
+      {open && session > 0 ? (
+        <NewProjectForm
+          key={session}
+          store={store}
+          initialStatus={initialStatus}
+          dialogRef={ref}
+          onClose={onClose}
+          onCreated={onCreated}
+        />
+      ) : null}
     </dialog>
   );
 }
 
 function NewProjectForm({
   store,
+  initialStatus,
   dialogRef,
   onClose,
   onCreated,
 }: {
   store: ProjectsStore;
+  initialStatus?: ProjectStatus;
   dialogRef: RefObject<HTMLDialogElement>;
   onClose: () => void;
   onCreated: (project: Project) => void;
 }) {
   const uid = useId().replace(/:/g, "");
   const id = (name: string) => `np-${uid}-${name}`;
-  const [values, setValues] = useState<ProjectFormValues>(emptyProjectForm);
+  const [values, setValues] = useState<ProjectFormValues>(() => {
+    const empty = emptyProjectForm();
+    return initialStatus && NEW_STATUSES.includes(initialStatus) ? { ...empty, status: initialStatus } : empty;
+  });
   const [errors, setErrors] = useState<ProjectFormErrors>({});
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);

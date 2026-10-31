@@ -9,7 +9,8 @@ import styles from "./InlineText.module.css";
 // Text you edit where it sits: the project name, its description, a goal, a task. A pencil button
 // (and a click on the text) switches to a field; Enter saves (Ctrl+Enter in a multi-line field),
 // Escape cancels, leaving the field saves. A failed save keeps the field open with the text and
-// the reason. Focus returns to the pencil after saving or cancelling.
+// the reason. Focus returns to the pencil after saving or cancelling. The pencil carries
+// data-part="edit-text", so a row's right-click Edit item can press it.
 
 export interface InlineTextProps {
   value: string;
@@ -181,6 +182,7 @@ export function InlineText({
         aria-label={editLabel}
         tip={tip ?? (multiline ? "Edits this text in place; Ctrl+Enter saves, Esc cancels." : "Edits this text in place; Enter saves, Esc cancels.")}
         className={styles.pencil}
+        data-part="edit-text"
         onClick={start}
       />
     </span>

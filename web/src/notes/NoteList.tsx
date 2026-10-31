@@ -1,8 +1,10 @@
-import { forwardRef, type CSSProperties } from "react";
+import { forwardRef, useRef, type CSSProperties } from "react";
 import type { NoteMeta, Project } from "../../../shared/types";
+import type { MenuSection } from "../lib/contextMenu";
 import { formatNumber } from "../lib/format";
 import { ALL_NOTES, formatNoteDate, noteSection, sectionLabel } from "../lib/notes";
 import { noteHash } from "../lib/route";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { TaskIcon } from "./icons";
 import { projectName } from "./useProjectOptions";
 import styles from "./NoteList.module.css";
@@ -11,6 +13,7 @@ import styles from "./NoteList.module.css";
 // #/notes/<path>, so it works with the keyboard, middle-click and the browser's back button.
 // Row: title and date, then chips (linked project, open action items, subsection), then a
 // two-line excerpt. Only the first rows animate in; a long list renders at once.
+// Right-click (or the menu key) on a row shows the actions Notes builds for that note (menuFor).
 
 export interface NoteListProps {
   notes: NoteMeta[];
@@ -18,6 +21,8 @@ export interface NoteListProps {
   section: string;
   openPath: string | null;
   projects: readonly Project[] | null;
+  /** Right-click menu section for one note. */
+  menuFor?: (note: NoteMeta) => MenuSection | null;
 }
 
 const STAGGER_ROWS = 12;
@@ -30,12 +35,25 @@ function subsectionOf(note: NoteMeta, section: string): string | null {
 }
 
 export const NoteList = forwardRef<HTMLUListElement, NoteListProps>(function NoteList(
-  { notes, section, openPath, projects },
+  { notes, section, openPath, projects, menuFor },
   ref,
 ) {
   const now = new Date();
+  /** The note a right-click landed on. */
+  const menuNote = useRef<NoteMeta | null>(null);
+  const menu = useMenuRegion(() => (menuNote.current && menuFor ? menuFor(menuNote.current) : null));
   return (
-    <ul ref={ref} className={styles.list} aria-label={`Notes in ${sectionLabel(section)}`}>
+    <ul
+      ref={ref}
+      className={styles.list}
+      aria-label={`Notes in ${sectionLabel(section)}`}
+      onContextMenu={(e) => {
+        const link = e.target instanceof Element ? e.target.closest("a[data-path]") : null;
+        const path = link?.getAttribute("data-path");
+        menuNote.current = (path && notes.find((n) => n.path === path)) || null;
+        menu.onContextMenu(e);
+      }}
+    >
       {notes.map((note, i) => {
         const open = note.path === openPath;
         const sub = subsectionOf(note, section);

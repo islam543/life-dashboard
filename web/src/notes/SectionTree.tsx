@@ -10,7 +10,8 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import type { NoteSection } from "../../../shared/types";
+import type { NoteSection, NoteTemplate } from "../../../shared/types";
+import type { MenuSection } from "../lib/contextMenu";
 import { formatNumber } from "../lib/format";
 import {
   ALL_NOTES,
@@ -29,6 +30,8 @@ import {
   type TreeRow,
 } from "../lib/notes";
 import { Button } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
+import { copyText, fullPath } from "./filePaths";
 import { CheckIcon, ChevronIcon, CopyIcon, PencilIcon, PlusIcon, StackIcon, TrashIcon } from "./icons";
 import styles from "./SectionTree.module.css";
 
@@ -36,7 +39,12 @@ import styles from "./SectionTree.module.css";
 // Home and End jump, Enter or Space opens a section in the list, F2 renames it, typing a letter jumps
 // to the next section starting with it. "All notes" sits on top and lists everything. Below the tree:
 // New subsection, Rename and Delete for the open section (Delete only when it is empty, with the
-// reason shown otherwise), then the notes folder path so the files can be found in Obsidian.
+// reason shown otherwise), then the open section's folder path (the notes folder for All notes) so
+// the files can be found in Obsidian.
+//
+// Right-click (or the menu key) on a section offers the same actions for that section without
+// opening it first: New note here, New meeting note here, New subsection, Rename, Copy folder path
+// and Delete section. Each one calls the handler its visible control calls.
 
 export interface SectionTreeHandle {
   /** Move focus to the open section's row (after coming back to this pane on a phone). */
@@ -56,7 +64,15 @@ export interface SectionTreeProps {
   onCreate: (parent: string, name: string) => Promise<string | null>;
   onRename: (path: string, name: string) => Promise<string | null>;
   onDelete: (path: string) => Promise<string | null>;
+  /**
+   * Opens the New note form for a section (ALL_NOTES: the default section), with a template picked
+   * when one is given. The same form the New note button opens.
+   */
+  onNewNote: (section: string, template: NoteTemplate | null) => void;
 }
+
+const NO_SECTIONS_REASON = "Notes live in sections; add one with New section first.";
+const COPIED_MS = 2000;
 
 type Editing = { kind: "create"; parent: string } | { kind: "rename"; path: string } | null;
 
@@ -171,7 +187,7 @@ function NameForm({
 }
 
 export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(function SectionTree(
-  { sections, counts, selected, expanded, notesDir, onToggle, onSelect, onCreate, onRename, onDelete },
+  { sections, counts, selected, expanded, notesDir, onToggle, onSelect, onCreate, onRename, onDelete, onNewNote },
   ref,
 ) {
   const rows = useMemo(() => visibleRows(sections, expanded), [sections, expanded]);
@@ -179,8 +195,14 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
   const [editing, setEditing] = useState<Editing>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [copied, setCopied] = useState(false);
+  /** Path of the section being deleted, so only its own Delete control shows the spinner. */
+  const [deleting, setDeleting] = useState<string | null>(null);
+  /** Path whose folder was just copied; the Copy path button reads Copied while it is the open one. */
+  const [copied, setCopied] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  /** The row a right-click landed on (its path; ALL_NOTES for All notes), or null for the pane around the tree. */
+  const menuRow = useRef<string | null>(null);
   const itemRefs = useRef(new Map<string, HTMLLIElement>());
   const wantFocus = useRef<string | null>(null);
   const uid = useId().replace(/:/g, "");
@@ -200,6 +222,13 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
     }
   });
 
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
   useImperativeHandle(ref, () => ({
     focusSelected: () => {
       setFocusPath(selected);
@@ -214,6 +243,8 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
   };
 
   const selectedSection = selected === ALL_NOTES ? null : findSection(sections, selected);
+  /** The folder shown and copied under the tree: the open section's, or the notes folder. */
+  const folder = selectedSection ? selected : ALL_NOTES;
   const depth = sectionDepth(selected);
   const tooDeep = depth >= MAX_SECTION_DEPTH;
   const blocked = selectedSection ? deleteBlockedReason(selectedSection, counts.get(selected)) : null;
@@ -223,11 +254,12 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
       .filter(Boolean)
       .join(" ") || null;
 
-  const startCreate = () => {
-    if (tooDeep) return;
+  /** Shows the inline name field for a new section inside `parent` (ALL_NOTES: a top-level section). */
+  const startCreate = (parent: string) => {
+    if (sectionDepth(parent) >= MAX_SECTION_DEPTH) return;
     setDeleteError(null);
-    if (selected !== ALL_NOTES && !expanded.has(selected)) onToggle(selected, true);
-    setEditing({ kind: "create", parent: selected });
+    if (parent !== ALL_NOTES && !expanded.has(parent)) onToggle(parent, true);
+    setEditing({ kind: "create", parent });
   };
 
   const startRename = (path: string) => {
@@ -241,19 +273,127 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
     focusRow(focusTo);
   };
 
-  const remove = async () => {
-    if (!selectedSection || blocked) return;
-    setDeleting(true);
+  /** Deletes an empty section (the open one from the toolbar, any one from its right-click menu). */
+  const remove = async (section: NoteSection | null) => {
+    if (!section || deleting !== null || deleteBlockedReason(section, counts.get(section.path))) return;
+    setDeleting(section.path);
     setDeleteError(null);
-    const name = selectedSection.name;
-    const failed = await onDelete(selectedSection.path);
-    setDeleting(false);
-    if (failed) setDeleteError(failed);
-    else {
-      setStatus(`Deleted section ${name}.`);
-      focusRow(parentPath(selectedSection.path));
+    const { name, path } = section;
+    const failed = await onDelete(path);
+    setDeleting(null);
+    if (failed) {
+      setDeleteError(path === selected ? failed : `Couldn't delete ${name}. ${failed}`);
+      return;
     }
+    setStatus(`Deleted section ${name}.`);
+    // Focus moves to the parent row when it was in the tree (or lost with the row), never out of the editor.
+    const active = document.activeElement;
+    if (!active || active === document.body || wrapRef.current?.contains(active)) focusRow(parentPath(path));
+    else setFocusPath(parentPath(path));
   };
+
+  /** Copies a section's full folder path (ALL_NOTES: the notes folder). */
+  const copyFolder = (path: string) => {
+    void copyText(fullPath(notesDir, path)).then((ok) => {
+      if (!ok) return;
+      setCopied(path);
+      setStatus(path === ALL_NOTES ? "Copied the notes folder path." : `Copied the folder path of ${baseName(path)}.`);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(null), COPIED_MS);
+    });
+  };
+
+  /* Right-click menu ----------------------------------------------------------------------------- */
+
+  const noSections = sections.length === 0;
+
+  const newSectionItem = {
+    label: "New section",
+    icon: <PlusIcon />,
+    onSelect: () => startCreate(ALL_NOTES),
+    tip: "Adds a top-level folder to your notes folder; type its name, then press Enter.",
+  };
+
+  const menu = useMenuRegion((): MenuSection | null => {
+    const path = menuRow.current;
+    if (path === null) return { title: "Sections", items: [newSectionItem] };
+
+    if (path === ALL_NOTES) {
+      return {
+        title: "All notes",
+        items: [
+          {
+            label: "New note",
+            icon: <PlusIcon />,
+            onSelect: () => onNewNote(ALL_NOTES, null),
+            disabled: noSections ? NO_SECTIONS_REASON : false,
+            tip: "Opens the new note form; pick its section and template there.",
+          },
+          {
+            label: "New meeting note",
+            onSelect: () => onNewNote(ALL_NOTES, "meeting"),
+            disabled: noSections ? NO_SECTIONS_REASON : false,
+            tip: "Opens the new note form with the Meeting template picked.",
+          },
+          newSectionItem,
+          {
+            label: "Copy folder path",
+            icon: <CopyIcon />,
+            onSelect: () => copyFolder(ALL_NOTES),
+            tip: "Copies the notes folder path, so you can open it in File Explorer or Obsidian.",
+          },
+        ],
+      };
+    }
+
+    const section = findSection(sections, path);
+    if (!section) return null;
+    const deep = sectionDepth(path) >= MAX_SECTION_DEPTH;
+    const blockedHere = deleteBlockedReason(section, counts.get(path));
+    return {
+      title: section.name,
+      items: [
+        {
+          label: "New note here",
+          icon: <PlusIcon />,
+          onSelect: () => onNewNote(path, null),
+          tip: "Opens the new note form with this section picked; the template follows the section.",
+        },
+        {
+          label: "New meeting note here",
+          onSelect: () => onNewNote(path, "meeting"),
+          tip: "Opens the new note form with this section and the Meeting template picked.",
+        },
+        {
+          label: "New subsection",
+          onSelect: () => startCreate(path),
+          disabled: deep ? `Sections nest ${MAX_SECTION_DEPTH} levels deep at most, so this one can't hold subsections.` : false,
+          tip: "Adds a folder inside this section; type its name, then press Enter.",
+        },
+        {
+          label: "Rename",
+          icon: <PencilIcon />,
+          hint: "F2",
+          onSelect: () => startRename(path),
+          tip: "Renames this section's folder on disk, and its notes move with it.",
+        },
+        {
+          label: "Copy folder path",
+          icon: <CopyIcon />,
+          onSelect: () => copyFolder(path),
+          tip: "Copies this section's full folder path, so you can open it in File Explorer or Obsidian.",
+        },
+        {
+          label: "Delete section",
+          icon: <TrashIcon />,
+          danger: true,
+          onSelect: () => void remove(section),
+          disabled: blockedHere ?? (deleting !== null ? "Another section is being deleted; try again in a moment." : false),
+          tip: "Removes this empty section's folder right away; no notes are affected.",
+        },
+      ],
+    };
+  });
 
   const onKeyDown = (e: KeyboardEvent<HTMLUListElement>) => {
     if (!(e.target instanceof HTMLLIElement) || e.target.getAttribute("role") !== "treeitem") return;
@@ -339,6 +479,7 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
         tabIndex={row.path === tabStop ? 0 : -1}
         className={styles.item}
         style={{ "--level": row.level } as CSSProperties}
+        data-section={row.path}
         data-all={isAll ? "" : undefined}
         data-tip={
           isAll
@@ -412,7 +553,15 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
   });
 
   return (
-    <div className={styles.wrap}>
+    <div
+      ref={wrapRef}
+      className={styles.wrap}
+      onContextMenu={(e) => {
+        const row = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-section]") : null;
+        menuRow.current = row ? (row.dataset.section ?? null) : null;
+        menu.onContextMenu(e);
+      }}
+    >
       <span id={labelId} className="sr-only">
         Sections
       </span>
@@ -425,7 +574,7 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
           size="sm"
           variant="ghost"
           icon={<PlusIcon />}
-          onClick={startCreate}
+          onClick={() => startCreate(selected)}
           aria-disabled={tooDeep || undefined}
           aria-describedby={tooDeep ? reasonId : undefined}
           className={tooDeep ? styles.inactive : undefined}
@@ -454,8 +603,8 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
               size="sm"
               variant="ghost"
               icon={<TrashIcon />}
-              onClick={() => void remove()}
-              loading={deleting}
+              onClick={() => void remove(selectedSection)}
+              loading={deleting === selected}
               loadingLabel="Deleting"
               aria-disabled={blocked ? true : undefined}
               aria-describedby={blocked ? reasonId : undefined}
@@ -486,27 +635,22 @@ export const SectionTree = forwardRef<SectionTreeHandle, SectionTreeProps>(funct
       </p>
 
       <div className={styles.folder}>
-        <p className={styles.folderLabel}>Notes folder</p>
+        <p className={styles.folderLabel}>{selectedSection ? "Section folder" : "Notes folder"}</p>
         <p className={styles.folderPath} dir="ltr">
-          {notesDir}
+          {fullPath(notesDir, folder)}
         </p>
         <Button
           size="sm"
           variant="ghost"
-          icon={copied ? <CheckIcon /> : <CopyIcon />}
-          onClick={() => {
-            if (!navigator.clipboard) return;
-            void navigator.clipboard.writeText(notesDir).then(
-              () => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              },
-              () => undefined,
-            );
-          }}
-          tip="Copies the notes folder path, so you can open it in File Explorer or Obsidian."
+          icon={copied === folder ? <CheckIcon /> : <CopyIcon />}
+          onClick={() => copyFolder(folder)}
+          tip={
+            selectedSection
+              ? "Copies this section's full folder path, so you can open it in File Explorer or Obsidian."
+              : "Copies the notes folder path, so you can open it in File Explorer or Obsidian."
+          }
         >
-          {copied ? "Copied" : "Copy path"}
+          {copied === folder ? "Copied" : "Copy path"}
         </Button>
       </div>
     </div>

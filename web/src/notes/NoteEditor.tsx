@@ -9,9 +9,11 @@ import {
   useState,
   type KeyboardEvent,
   type Ref,
+  type RefObject,
 } from "react";
 import type { Note, NotesIndex, Project, ProjectStatus } from "../../../shared/types";
 import { notesApi } from "../api/notes";
+import type { MenuSection } from "../lib/contextMenu";
 import {
   byteLength,
   formatNoteDate,
@@ -23,11 +25,13 @@ import {
   validateTitle,
 } from "../lib/notes";
 import { Button, Spinner } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { EmptyState } from "../ui/EmptyState";
 import { Panel } from "../ui/Panel";
 import { Skeleton } from "../ui/Skeleton";
 import { StatusDot } from "../ui/StatusDot";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { copyText, fullPath } from "./filePaths";
 import { CheckIcon, CopyIcon, TrashIcon, WarnIcon } from "./icons";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { TagInput } from "./TagInput";
@@ -41,6 +45,11 @@ import styles from "./NoteEditor.module.css";
 // The status in the header always says where the text is: Saving, Saved 14:05, or Not saved and why.
 // Ultrawide screens (1920px and up) drop the tabs: the editor and a live Preview panel sit side by side
 // (two panels, so the Notes view shows four panes), each text column kept to 75 characters or less.
+// Right-click outside the text fields offers Show preview or Edit (when there are tabs), Copy path and
+// Delete note; the text fields keep the browser's own menu for spelling and paste.
+
+/** Something the Notes view asks the editor to do once the note has loaded (from the notes list menu). */
+export type EditorAsk = "project" | "delete";
 
 /** What the Notes view needs from the open editor (leave guard, section rename). */
 export interface EditorHandle {
@@ -62,12 +71,16 @@ export interface NoteEditorProps {
   /** The text was saved as a new note (the old file was gone). */
   onRecreated: (note: Note) => void;
   handleRef: Ref<EditorHandle>;
+  /** Move to the Project field, or ask to delete, once loaded. Done (or dropped) calls onAskDone. */
+  ask?: EditorAsk | null;
+  onAskDone?: () => void;
 }
 
 const STATUS_ORDER: readonly ProjectStatus[] = ["active", "paused", "idea", "done"];
 const STATUS_GROUP: Record<ProjectStatus, string> = { active: "Active", paused: "Paused", idea: "Ideas", done: "Done" };
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
 const SIZE_WARN_BYTES = 150 * 1024;
+const COPIED_MS = 2000;
 
 function SaveStatus({ save }: { save: SaveState }) {
   switch (save.kind) {
@@ -123,10 +136,12 @@ function ProjectSelect({
   value,
   options,
   onChange,
+  selectRef,
 }: {
   value: string | null;
   options: ProjectOptions;
   onChange: (id: string | null) => void;
+  selectRef: RefObject<HTMLSelectElement>;
 }) {
   const id = `project-${useId().replace(/:/g, "")}`;
   const list: readonly Project[] = options.projects ?? [];
@@ -142,6 +157,7 @@ function ProjectSelect({
         Project
       </label>
       <select
+        ref={selectRef}
         id={id}
         className={styles.select}
         value={value ?? ""}
@@ -235,14 +251,6 @@ function TitleField({
       }}
       {...aria}
     />
-  );
-}
-
-function copyText(text: string): Promise<boolean> {
-  if (!navigator.clipboard) return Promise.resolve(false);
-  return navigator.clipboard.writeText(text).then(
-    () => true,
-    () => false,
   );
 }
 
@@ -341,6 +349,8 @@ export function NoteEditor({
   onDeleted,
   onRecreated,
   handleRef,
+  ask = null,
+  onAskDone,
 }: NoteEditorProps) {
   const doc = useNoteDocument(path, onSaved);
   /** Ultrawide: editor and live preview side by side instead of tabs. */
@@ -349,7 +359,10 @@ export function NoteEditor({
   const previewBody = useDeferredValue(doc.fields.body);
   const [mode, setMode] = useState<"write" | "preview">("write");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pathCopied, setPathCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const projectRef = useRef<HTMLSelectElement>(null);
   const writeTabRef = useRef<HTMLButtonElement>(null);
   const previewTabRef = useRef<HTMLButtonElement>(null);
   const focused = useRef(false);
@@ -376,6 +389,87 @@ export function NoteEditor({
     el.focus();
     el.setSelectionRange(at, at);
   }, [autoFocusBody, doc.load]);
+
+  // A request from the notes list menu: run it once the note is on screen. A note that failed to
+  // load drops it, so it never fires later by surprise.
+  useEffect(() => {
+    if (!ask || doc.load === "loading") return;
+    onAskDone?.();
+    if (doc.load !== "ready") return;
+    if (ask === "delete") {
+      setConfirmDelete(true);
+      return;
+    }
+    const select = projectRef.current;
+    if (!select) return;
+    select.focus();
+    select.scrollIntoView({ block: "nearest" });
+    try {
+      // Opens the project list right away where the browser allows it; focus alone is enough otherwise.
+      (select as HTMLSelectElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      // Not allowed without a recent click: the field has focus, and Alt+Down opens it.
+    }
+  }, [ask, doc.load]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  /** Copies the note's full file path (footer button and right-click menu). */
+  const copyPath = () => {
+    void copyText(fullPath(notesDir, path)).then((ok) => {
+      if (!ok) return;
+      setPathCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setPathCopied(false), COPIED_MS);
+    });
+  };
+
+  const showPreview = () => {
+    void doc.flush();
+    setMode("preview");
+  };
+
+  const showWrite = () => {
+    setMode("write");
+    setTimeout(() => bodyRef.current?.focus(), 0);
+  };
+
+  const menu = useMenuRegion((): MenuSection | null => {
+    if (doc.load !== "ready") return null;
+    return {
+      title: doc.fields.title.trim() || "Untitled note",
+      items: [
+        !split && mode === "write"
+          ? {
+              label: "Show preview",
+              onSelect: showPreview,
+              tip: "Saves, then shows the note formatted; tick task boxes there to update the file.",
+            }
+          : null,
+        !split && mode === "preview"
+          ? { label: "Edit", onSelect: showWrite, tip: "Shows the markdown text again and puts the caret in it." }
+          : null,
+        {
+          label: "Copy path",
+          icon: <CopyIcon />,
+          onSelect: copyPath,
+          tip: "Copies the note's full file path, so you can find it in File Explorer or Obsidian.",
+        },
+        {
+          label: "Delete note",
+          icon: <TrashIcon />,
+          danger: true,
+          onSelect: () => setConfirmDelete(true),
+          tip: "Asks first, then moves the file to .trash in your notes folder; nothing is erased.",
+        },
+      ],
+    };
+  });
 
   const toggleTask = useCallback(
     (line: number) => {
@@ -484,7 +578,7 @@ export function NoteEditor({
       bodyClassName={styles.panelBody}
       action={<SaveStatus save={save} />}
     >
-      <div className={styles.editor} data-split={split || undefined} onKeyDown={onKeyDown}>
+      <div className={styles.editor} data-split={split || undefined} onKeyDown={onKeyDown} {...menu}>
         {doc.draft ? (
           <div className={styles.banner} data-tone="warn" role="status">
             <p className={styles.bannerText}>
@@ -588,7 +682,12 @@ export function NoteEditor({
         </div>
 
         <div className={styles.metaRow}>
-          <ProjectSelect value={fields.projectId} options={projects} onChange={(id) => doc.edit({ projectId: id }, true)} />
+          <ProjectSelect
+            value={fields.projectId}
+            options={projects}
+            onChange={(id) => doc.edit({ projectId: id }, true)}
+            selectRef={projectRef}
+          />
           <TagInput tags={fields.tags} onChange={(tags) => doc.edit({ tags }, true)} onBlur={() => void doc.flush()} />
         </div>
 
@@ -678,6 +777,15 @@ export function NoteEditor({
           <Button
             size="sm"
             variant="ghost"
+            icon={pathCopied ? <CheckIcon /> : <CopyIcon />}
+            onClick={copyPath}
+            tip="Copies the note's full file path, so you can find it in File Explorer or Obsidian."
+          >
+            {pathCopied ? "Copied" : "Copy path"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             className={styles.deleteButton}
             icon={<TrashIcon />}
             onClick={() => setConfirmDelete(true)}
@@ -724,7 +832,7 @@ export function NoteEditor({
       {editorPanel}
       <Panel title="Preview" state="ok" className={styles.panel} bodyClassName={styles.livePreviewBody}>
         {/* Focusable so the keyboard can scroll a long note. */}
-        <div className={styles.livePreview} role="region" aria-label="Formatted note" tabIndex={0}>
+        <div className={styles.livePreview} role="region" aria-label="Formatted note" tabIndex={0} {...menu}>
           <MarkdownPreview
             markdown={previewBody}
             onToggleTask={toggleTask}

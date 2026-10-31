@@ -4,13 +4,15 @@ import type { NextMove } from "../../../shared/types";
 import { MOTION } from "../hooks/useReducedMotion";
 import { useNextMoves } from "../hooks/useNextMoves";
 import { areaLabel, relativeTime } from "../lib/format";
+import type { MenuSection } from "../lib/contextMenu";
 import { openMoves } from "../lib/kpis";
 import { Button, Spinner } from "../ui/Button";
+import { useMenuRegion } from "../ui/ContextMenu";
 import { EmptyState } from "../ui/EmptyState";
 import { Panel, type PanelState } from "../ui/Panel";
 import { SkeletonRows } from "../ui/Skeleton";
 import { StatusDot } from "../ui/StatusDot";
-import { opensIn } from "./NeedsYouStrip";
+import { openItem, opensIn } from "./linkMenu";
 import styles from "./NextMovesPanel.module.css";
 
 // AI next moves, in the violet accent. A ranked route of steps: the first node glows as "Next".
@@ -20,9 +22,20 @@ import styles from "./NextMovesPanel.module.css";
 //   not_logged_in  the exact terminal step, then Try again
 //   error          what failed and Try again; earlier moves stay visible under a notice
 //   ok             the ranked list, Done and Dismiss animate the move out
+// Right-click a move for Mark done, Dismiss and its link; the panel for Re-run (or Generate, Try again).
+// They call the same handlers as the buttons, so focus, announcements and errors behave the same.
 
 type Exit = "done" | "dismissed";
 type LastAction = "run" | Exit;
+
+const TIP = {
+  done: "Marks this move done and takes it off the list; new runs skip it for 7 days.",
+  dismiss: "Hides this move without doing it; new runs skip it for 7 days.",
+  rerun: "Asks Claude for a new ranked list from your latest data; if it fails, these stay.",
+  running: "Claude is ranking your moves now; the list updates when it finishes.",
+  generate: "Asks Claude to rank your next steps from your tickets, pull requests and learning.",
+  tryAgain: "Runs Claude again; log in first by running claude in a terminal.",
+} as const;
 
 const ACTION_FAILED: Record<LastAction, string> = {
   run: "Couldn't start a run.",
@@ -186,9 +199,18 @@ const MoveRow = forwardRef<HTMLLIElement, MoveRowProps>(function MoveRow({ move,
         ? { opacity: 0, x: 36, transition: { duration: MOTION.slow, ease: MOTION.easeIn } }
         : { opacity: 0, scale: 0.96, transition: { duration: MOTION.base, ease: MOTION.easeIn } },
   };
+  const menu = useMenuRegion(() => ({
+    title: move.title,
+    items: [
+      { label: "Mark done", onSelect: () => onSet(move, "done"), tip: TIP.done },
+      { label: "Dismiss", onSelect: () => onSet(move, "dismissed"), tip: TIP.dismiss },
+      openItem(move.sourceUrl),
+    ],
+  }));
 
   return (
     <motion.li
+      {...menu}
       ref={ref}
       layout="position"
       className={[styles.move, first ? styles.first : ""].filter(Boolean).join(" ")}
@@ -239,7 +261,7 @@ const MoveRow = forwardRef<HTMLLIElement, MoveRowProps>(function MoveRow({ move,
           className={styles.done}
           onClick={() => onSet(move, "done")}
           aria-label={`Done: ${move.title}`}
-          tip="Marks this move done and takes it off the list; new runs skip it for 7 days."
+          tip={TIP.done}
         >
           Done
         </Button>
@@ -250,7 +272,7 @@ const MoveRow = forwardRef<HTMLLIElement, MoveRowProps>(function MoveRow({ move,
           className={styles.dismiss}
           onClick={() => onSet(move, "dismissed")}
           aria-label={`Dismiss: ${move.title}`}
-          tip="Hides this move without doing it; new runs skip it for 7 days."
+          tip={TIP.dismiss}
         >
           Dismiss
         </Button>
@@ -352,7 +374,7 @@ export function NextMovesPanel() {
             variant="primary"
             icon={<SparkIcon />}
             onClick={run}
-            tip="Asks Claude to rank your next steps from your tickets, pull requests and learning."
+            tip={TIP.generate}
           >
             Generate next moves
           </Button>
@@ -375,7 +397,7 @@ export function NextMovesPanel() {
           size="sm"
           icon={<SparkIcon />}
           onClick={run}
-          tip="Runs Claude again; log in first by running claude in a terminal."
+          tip={TIP.tryAgain}
         >
           Try again
         </Button>
@@ -432,15 +454,20 @@ export function NextMovesPanel() {
       loading={running}
       loadingLabel="Running"
       onClick={run}
-      tip={
-        running
-          ? "Claude is ranking your moves now; the list updates when it finishes."
-          : "Asks Claude for a new ranked list from your latest data; if it fails, these stay."
-      }
+      tip={running ? TIP.running : TIP.rerun}
     >
       Re-run
     </Button>
   ) : undefined;
+
+  // The panel's own right-click items: the run button the panel shows in this state.
+  const menu: MenuSection["items"] = showRerun
+    ? [{ label: running ? "Running" : "Re-run next moves", onSelect: run, disabled: running ? TIP.running : false, tip: TIP.rerun }]
+    : file?.status === "never_run" && !running
+      ? [{ label: "Generate next moves", onSelect: run, tip: TIP.generate }]
+      : file?.status === "not_logged_in" && !running
+        ? [{ label: "Try again", onSelect: run, tip: TIP.tryAgain }]
+        : [];
 
   return (
     <>
@@ -458,6 +485,7 @@ export function NextMovesPanel() {
         skeleton="rows"
         meta={meta}
         action={action}
+        menu={menu}
       >
         {actionError}
         {body}
