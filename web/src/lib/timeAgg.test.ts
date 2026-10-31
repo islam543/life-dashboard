@@ -439,3 +439,31 @@ describe("placeWeekItems", () => {
     expect(placed.days.flat()).toHaveLength(4);
   });
 });
+
+describe("last 30 days range", async () => {
+  const { daysSoFar, lastDayKeys, projectTotals, rangeDayKeys, rangePhrase } = await import("./timeAgg");
+  const now = new Date(2026, 9, 31, 15, 0); // Sat 31 Oct 2026, 15:00 local
+
+  it("covers the 30 days ending today, across a month boundary", () => {
+    const keys = lastDayKeys(now);
+    expect(keys).toHaveLength(30);
+    expect(keys[29]).toBe(dayKey(new Date(2026, 9, 31)));
+    expect(keys[0]).toBe(dayKey(new Date(2026, 9, 2)));
+    expect(rangeDayKeys("last30", now)).toEqual(keys);
+    expect(lastDayKeys(new Date(2026, 2, 5), 10)[0]).toBe(dayKey(new Date(2026, 1, 24)));
+  });
+
+  it("counts time from the window only, and reads as a phrase", () => {
+    const sessions: SessionTime[] = [
+      { project: "A", minutesByDay: { [dayKey(new Date(2026, 9, 2))]: 30, [dayKey(new Date(2026, 9, 1))]: 999 } },
+      { project: "B", minutesByDay: { [dayKey(new Date(2026, 9, 31))]: 60 } },
+    ] as SessionTime[];
+    expect(projectTotals(sessions, "last30", now).map((t) => [t.project, t.minutes])).toEqual([
+      ["B", 60],
+      ["A", 30],
+    ]);
+    expect(daysSoFar("last30", now)).toBe(30);
+    expect(daysSoFar("week", now)).toBe(7);
+    expect(rangePhrase("last30")).toBe("the last 30 days");
+  });
+});

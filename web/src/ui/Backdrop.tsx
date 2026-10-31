@@ -9,12 +9,12 @@ import { drawFigures } from "./figures";
 // The animated layer behind every view: three slow colour glows (CSS), two figures (a turning
 // Earth bottom-right and a HUD dial top-left, see ui/figures.ts), and a field of data motes that
 // drift, link up when close and light up near the pointer (canvas).
-//   - Cheap on purpose: the glows only animate transform, the canvas draws at 30 fps at most,
+//   - Cheap on purpose: the glows only animate transform, the canvas draws at 24 fps at most,
 //     at no more than 1.5x pixel density, and stops while the tab is hidden.
 //   - Still (one frame, no loop) under the OS reduce-motion setting or when Motion is off.
 //   - Never catches the pointer; it only listens for where the pointer is.
 
-const FPS = 30;
+const FPS = 24;
 const LINK = 130;
 const POINTER_RADIUS = 180;
 const MAX_DPR = 1.5;

@@ -1,5 +1,19 @@
 import landDots from "../assets/landDots.json";
-import { HOME, frontRuns, meridian, parallel, project, type FigureLayout } from "../lib/globe";
+import landOutline from "../assets/landOutline.json";
+import {
+  CITIES,
+  HOME,
+  ROUTES,
+  arcPoints,
+  frontRuns,
+  meridian,
+  parallel,
+  project,
+  routePhase,
+  toVec,
+  viewPoint,
+  type FigureLayout,
+} from "../lib/globe";
 
 // Canvas drawing for the background figures (called by ui/Backdrop.tsx each frame):
 //   - a holographic Earth rising from the bottom-right corner: dotted continents, a lat/long grid,
@@ -15,6 +29,15 @@ export interface FigureColors {
 }
 
 const DOTS = landDots as [number, number][];
+const COASTS = landOutline as [number, number][][];
+const ARC_STEPS = 48;
+/** Route arcs in world space, built once; only the view (spin, tilt) changes per frame. */
+const ARCS = ROUTES.map(([from, to]) =>
+  arcPoints(toVec(CITIES[from].lon, CITIES[from].lat), toVec(CITIES[to].lon, CITIES[to].lat), ARC_STEPS),
+);
+const CITY_VECS = Object.values(CITIES)
+  .filter((c) => c.lon !== HOME.lon || c.lat !== HOME.lat)
+  .map((c) => toVec(c.lon, c.lat));
 const TILT = 18; // degrees the north pole leans toward you
 const SPIN_SPEED = 4; // degrees per second: one turn every 90 s
 const GRID_LONS = Array.from({ length: 12 }, (_, i) => i * 30 - 180);
@@ -71,10 +94,19 @@ function drawGlobe(ctx: CanvasRenderingContext2D, t: number, g: FigureLayout["gl
   for (const [lon, lat] of DOTS) {
     const p = project(lon, lat, spin, TILT);
     if (p.z <= 0.02) continue;
-    ctx.globalAlpha = (0.18 + 0.62 * p.z) * k;
-    const size = 0.9 + 1.5 * p.z;
+    ctx.globalAlpha = (0.14 + 0.5 * p.z) * k;
+    const size = 0.9 + 1.4 * p.z;
     ctx.fillRect(cx + p.x * r - size / 2, cy + p.y * r - size / 2, size, size);
   }
+
+  // Coastlines over the dots, so each landmass reads as a shape.
+  ctx.strokeStyle = c.strong;
+  ctx.lineWidth = 1.1;
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = 0.5 * k;
+  for (const ring of COASTS) strokeRuns(ctx, frontRuns(ring, spin, TILT), cx, cy, r);
+
+  drawRoutes(ctx, t, g, spin, c, k);
 
   // Rim.
   ctx.strokeStyle = c.accent;
@@ -139,6 +171,141 @@ function drawGlobe(ctx: CanvasRenderingContext2D, t: number, g: FigureLayout["gl
     ctx.stroke();
     ctx.restore();
   }
+}
+
+type ViewPt = ReturnType<typeof viewPoint>;
+
+/** Strokes the parts of an arc between point indexes `from` and `to` that can be seen. */
+function strokeArc(ctx: CanvasRenderingContext2D, view: ViewPt[], from: number, to: number, cx: number, cy: number, r: number) {
+  ctx.beginPath();
+  let pen = false;
+  for (let i = Math.max(0, from); i <= Math.min(view.length - 1, to); i++) {
+    const p = view[i];
+    if (!p.visible) {
+      pen = false;
+      continue;
+    }
+    if (pen) ctx.lineTo(cx + p.x * r, cy + p.y * r);
+    else ctx.moveTo(cx + p.x * r, cy + p.y * r);
+    pen = true;
+  }
+  ctx.stroke();
+}
+
+/**
+ * Routes between cities: a faint arc each, a dot that travels it with a fading trail, a ring that
+ * pops at take-off, and on landing a double shockwave with six sparks and a flash on the city.
+ */
+function drawRoutes(ctx: CanvasRenderingContext2D, t: number, g: FigureLayout["globe"], spin: number, c: FigureColors, k: number) {
+  const { cx, cy, r } = g;
+  const at = (p: ViewPt) => ({ x: cx + p.x * r, y: cy + p.y * r });
+
+  // City markers (Doha has its own ping).
+  ctx.fillStyle = c.strong;
+  for (const v of CITY_VECS) {
+    const p = viewPoint(v, spin, TILT);
+    if (p.z <= 0.05) continue;
+    ctx.globalAlpha = 0.65 * p.z * k;
+    ctx.beginPath();
+    ctx.arc(cx + p.x * r, cy + p.y * r, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ARCS.forEach((pts, i) => {
+    const view = pts.map((v) => viewPoint(v, spin, TILT));
+    const color = i % 3 === 0 ? c.violet : c.accent;
+    const n = view.length - 1;
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.3 * k;
+    strokeArc(ctx, view, 0, n, cx, cy, r);
+
+    const phase = routePhase(i, t);
+
+    if (phase.state === "travel") {
+      const head = phase.p * n;
+      const tail = Math.max(0, head - n * 0.3);
+      // Trail: short segments, brighter toward the head.
+      ctx.strokeStyle = color;
+      ctx.lineCap = "round";
+      for (let j = Math.floor(tail); j < Math.floor(head); j++) {
+        const f = (j - tail) / Math.max(1, head - tail);
+        ctx.lineWidth = 1 + f * 2.2;
+        ctx.globalAlpha = f * f * 0.85 * k;
+        strokeArc(ctx, view, j, j + 1, cx, cy, r);
+      }
+      const hp = view[Math.min(n, Math.round(head))];
+      if (hp.visible) {
+        const { x, y } = at(hp);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.2 * k;
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = c.strong;
+        ctx.globalAlpha = 0.95 * k;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Take-off ring at the origin.
+      const src = view[0];
+      if (phase.launch !== null && src.z > 0) {
+        const { x, y } = at(src);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.globalAlpha = (1 - phase.launch) * 0.75 * k;
+        ctx.beginPath();
+        ctx.arc(x, y, 3 + phase.launch * 13, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (phase.state === "landed") {
+      const dst = view[n];
+      if (dst.z > 0) {
+        const { x, y } = at(dst);
+        const p = phase.p;
+        const fade = 1 - p;
+        // Two shockwaves, the second a beat later.
+        ctx.strokeStyle = c.strong;
+        ctx.lineWidth = 1.6;
+        ctx.globalAlpha = fade * 0.85 * k;
+        ctx.beginPath();
+        ctx.arc(x, y, 3 + p * 24, 0, Math.PI * 2);
+        ctx.stroke();
+        const p2 = Math.max(0, p - 0.22) / 0.78;
+        if (p2 > 0) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.globalAlpha = (1 - p2) * 0.6 * k;
+          ctx.beginPath();
+          ctx.arc(x, y, 3 + p2 * 36, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        // Sparks flying out.
+        ctx.strokeStyle = c.strong;
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = "round";
+        ctx.globalAlpha = fade * fade * 0.9 * k;
+        for (let s = 0; s < 6; s++) {
+          const a = (s / 6) * Math.PI * 2 + i * 0.3;
+          const r1 = 5 + p * 12;
+          const r2 = 8 + p * 22;
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1);
+          ctx.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2);
+          ctx.stroke();
+        }
+        // The city flashes, then settles.
+        ctx.fillStyle = c.strong;
+        ctx.globalAlpha = (0.5 + fade * 0.5) * k;
+        ctx.beginPath();
+        ctx.arc(x, y, 2 + fade * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  });
+  ctx.lineCap = "butt";
 }
 
 function drawDial(ctx: CanvasRenderingContext2D, t: number, d: FigureLayout["dial"], c: FigureColors, k: number) {

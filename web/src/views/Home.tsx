@@ -13,7 +13,9 @@ import styles from "./Home.module.css";
 //
 // `act` holds Needs you and Next moves. Below 1920px it is display: contents, so both stay plain grid
 // cells and nothing changes. On ultrawide screens it is the left column: one stack whose two panels
-// share the screen height and scroll inside themselves. The DOM order is the same at every size.
+// share the screen height and scroll inside themselves. `side` does the same on the right for the
+// two Time by project panels (this week or month, then the last 30 days), which split the height
+// evenly. The DOM order is the same at every size.
 
 const order = (i: number) => ({ "--i": i }) as CSSProperties;
 
@@ -34,10 +36,15 @@ export function Home() {
       <div className={`${styles.cell} ${styles.week}`} style={order(3)}>
         <WeekTimeline />
       </div>
-      <div className={`${styles.cell} ${styles.bars}`} style={order(4)}>
-        <ProjectTimeBars />
+      <div className={styles.side}>
+        <div className={`${styles.cell} ${styles.bars}`} style={order(4)}>
+          <ProjectTimeBars />
+        </div>
+        <div className={`${styles.cell} ${styles.bars30}`} style={order(5)}>
+          <ProjectTimeBars fixedRange="last30" />
+        </div>
       </div>
-      <div className={`${styles.cell} ${styles.heat}`} style={order(5)}>
+      <div className={`${styles.cell} ${styles.heat}`} style={order(6)}>
         <YearHeatmap />
       </div>
     </div>

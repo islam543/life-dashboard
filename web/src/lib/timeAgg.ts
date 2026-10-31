@@ -53,6 +53,12 @@ export function monthDayKeys(now: Date): string[] {
   return Array.from({ length: days }, (_, i) => dayKey(new Date(now.getFullYear(), now.getMonth(), i + 1)));
 }
 
+/** The last `days` day keys ending today, oldest first (today is the last one). */
+export function lastDayKeys(now: Date, days = 30): string[] {
+  const today = startOfDay(now);
+  return Array.from({ length: days }, (_, i) => dayKey(addDays(today, i - days + 1)));
+}
+
 /** "12 Oct" */
 export function shortDay(date: Date): string {
   return `${date.getDate()} ${MONTH_SHORT[date.getMonth()]}`;
@@ -76,11 +82,27 @@ export function weekRangeLabel(now: Date): string {
 // Project-time bars
 // ---------------------------------------------------------------------------------------------
 
-export type TimeRange = "week" | "month";
+export type TimeRange = "week" | "month" | "last30";
 
-/** This week (Sunday to Saturday) or this calendar month. Future days add nothing, so they can stay in. */
+/**
+ * This week (Sunday to Saturday), this calendar month, or the rolling last 30 days ending today.
+ * Future days add nothing, so they can stay in.
+ */
 export function rangeDayKeys(range: TimeRange, now: Date): string[] {
+  if (range === "last30") return lastDayKeys(now, 30);
   return range === "week" ? weekDayKeys(now) : monthDayKeys(now);
+}
+
+/** Days of the range that have started, for "active N of M days": today counts. */
+export function daysSoFar(range: TimeRange, now: Date): number {
+  if (range === "last30") return 30;
+  return range === "week" ? now.getDay() + 1 : now.getDate();
+}
+
+/** How the range reads inside a sentence: "this week", "this month", "the last 30 days". */
+export function rangePhrase(range: TimeRange): string {
+  if (range === "last30") return "the last 30 days";
+  return range === "week" ? "this week" : "this month";
 }
 
 export interface ProjectTotal {

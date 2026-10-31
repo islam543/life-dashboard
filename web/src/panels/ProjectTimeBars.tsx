@@ -12,13 +12,14 @@ import {
   type RefObject,
 } from "react";
 import { MOTION, useReducedMotion } from "../hooks/useReducedMotion";
-import { ULTRAWIDE_QUERY, useMediaQuery } from "../notes/useMediaQuery";
 import { useSnapshot } from "../hooks/useSnapshot";
 import type { MenuSection } from "../lib/contextMenu";
 import { areaLabel, dayKey, formatMinutes, plural } from "../lib/format";
 import { projectHash } from "../lib/route";
 import {
+  daysSoFar as daysSoFarIn,
   projectTotals,
+  rangePhrase,
   registryReady,
   registryRows,
   registryTotals,
@@ -361,7 +362,7 @@ function BarItem({ row, onEnter, children }: { row: BarRow; onEnter: (row: BarRo
   );
 }
 
-function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number; range: TimeRange; daysSoFar: number }) {
+function Bars({ rows, total, period, daysSoFar }: { rows: BarRow[]; total: number; period: string; daysSoFar: number }) {
   const [hostRef, hostWidth] = useElementWidth<HTMLDivElement>();
   const [tip, setTip] = useState<TipData | null>(null);
   const [firstDraw, setFirstDraw] = useState(true);
@@ -377,7 +378,6 @@ function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number
   const max = rows.reduce((m, r) => (r.isOther ? m : Math.max(m, r.minutes)), 0);
   const x = scaleLinear().domain([0, max || 1]).range([0, 1]).clamp(true);
   const isCapped = (row: BarRow) => row.isOther && max > 0 && row.minutes > max;
-  const period = range === "week" ? "this week" : "this month";
 
   const showTip = (row: BarRow, li: HTMLLIElement) => {
     const host = hostRef.current;
@@ -437,16 +437,36 @@ function Bars({ rows, total, range, daysSoFar }: { rows: BarRow[]; total: number
   );
 }
 
-export function ProjectTimeBars() {
+const EMPTY: Record<TimeRange, { empty: string; hint: string }> = {
+  week: {
+    empty: "No Claude Code time this week yet.",
+    hint: "Switch to Month to see earlier work, or start a session in any project.",
+  },
+  month: {
+    empty: "No Claude Code time this month yet.",
+    hint: "Time shows here after your first Claude Code session of the month.",
+  },
+  last30: {
+    empty: "No Claude Code time in the last 30 days.",
+    hint: "Time shows here after your next Claude Code session in any project.",
+  },
+};
+
+/**
+ * Claude Code time per project. Without `fixedRange` it has the Week / Month toggle (kept in this
+ * browser); with one, it always shows that range and has no toggle (Home's "last 30 days" panel).
+ */
+export function ProjectTimeBars({ fixedRange }: { fixedRange?: TimeRange } = {}) {
   const snap = useSnapshot();
-  const [range, setRange] = useStoredChoice<TimeRange>("life-dashboard:time-range", RANGE_VALUES, "week");
+  const [chosen, setRange] = useStoredChoice<TimeRange>("life-dashboard:time-range", RANGE_VALUES, "week");
+  const range = fixedRange ?? chosen;
   const now = new Date();
   const today = dayKey(now);
   const sessions = snap.data?.work.sessionTime;
 
   const registry = snap.data?.projects;
-  // The ultrawide right column is tall, so it lists twice as many projects before folding into "Other".
-  const barCount = useMediaQuery(ULTRAWIDE_QUERY) ? 16 : 8;
+  // On ultrawide screens the right column holds this panel and the 30-day one, so each lists 8.
+  const barCount = 8;
   // `today` keeps the totals right across midnight without recomputing on every render.
   const { rows, total } = useMemo(() => {
     if (!sessions) return { rows: [] as BarRow[], total: 0 };
@@ -459,17 +479,14 @@ export function ProjectTimeBars() {
     return { rows: topWithOther(totals, barCount), total: totals.reduce((s, t) => s + t.minutes, 0) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, registry, range, today, barCount]);
-  const daysSoFar = range === "week" ? now.getDay() + 1 : now.getDate();
+  const daysSoFar = daysSoFarIn(range, now);
 
   const status = panelFromSource(snap, "claudeSessions", {
     isEmpty: () => rows.length === 0,
-    empty: range === "week" ? "No Claude Code time this week yet." : "No Claude Code time this month yet.",
-    emptyHint:
-      range === "week"
-        ? "Switch to Month to see earlier work, or start a session in any project."
-        : "Time shows here after your first Claude Code session of the month.",
+    empty: EMPTY[range].empty,
+    emptyHint: EMPTY[range].hint,
   });
-  const showToggle = status.state === "ok" || status.state === "empty";
+  const showToggle = !fixedRange && (status.state === "ok" || status.state === "empty");
   const other = RANGES.find((r) => r.value !== range);
   const menu: MenuSection["items"] = [
     showToggle && other ? { label: `Show this ${other.value}`, onSelect: () => setRange(other.value), tip: other.tip } : null,
@@ -482,7 +499,8 @@ export function ProjectTimeBars() {
 
   return (
     <Panel
-      title="Time by project"
+      title={range === "last30" ? "Time by project, last 30 days" : "Time by project"}
+      fit
       {...status}
       skeleton="chart"
       detail={{ area: "work", key: "time" }}
@@ -490,7 +508,7 @@ export function ProjectTimeBars() {
       meta={status.state === "ok" ? `${formatMinutes(total)} total` : undefined}
       action={showToggle ? <Segmented label="Period" options={RANGES} value={range} onChange={setRange} /> : undefined}
     >
-      <Bars rows={rows} total={total} range={range} daysSoFar={daysSoFar} />
+      <Bars rows={rows} total={total} period={rangePhrase(range)} daysSoFar={daysSoFar} />
     </Panel>
   );
 }

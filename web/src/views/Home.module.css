@@ -8,6 +8,7 @@
     "kpis"
     "week"
     "bars"
+    "bars30"
     "heat";
   gap: var(--grid-gap);
 }
@@ -24,8 +25,10 @@
   flex: 1;
 }
 
-/* Needs you and Next moves: a column of their own only on ultrawide screens (see the end). */
-.act {
+/* Needs you and Next moves, and the two Time by project panels: a column of their own only on
+   ultrawide screens (see the end). */
+.act,
+.side {
   display: contents;
 }
 
@@ -60,6 +63,10 @@
   grid-area: bars;
 }
 
+.bars30 {
+  grid-area: bars30;
+}
+
 .heat {
   grid-area: heat;
 }
@@ -72,6 +79,7 @@
       "needs needs"
       "moves kpis"
       "moves bars"
+      "moves bars30"
       "week  week"
       "heat  heat";
   }
@@ -91,6 +99,7 @@
       "needs needs needs needs needs needs needs needs needs needs needs needs"
       "moves moves moves moves moves kpis  kpis  kpis  kpis  kpis  kpis  kpis"
       "moves moves moves moves moves bars  bars  bars  bars  bars  bars  bars"
+      "moves moves moves moves moves bars30 bars30 bars30 bars30 bars30 bars30 bars30"
       "week  week  week  week  week  week  week  week  week  week  week  week"
       "heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat  heat";
   }
@@ -100,7 +109,8 @@
    Three columns read left to right by urgency:
      left 30%    act now: Needs you above Next moves, each scrolling inside itself
      centre 47%  the numbers: key numbers, this week, the last 52 weeks
-     right 23%   where the time went: project bars (8 projects plus Other at most, so it never scrolls)
+     right 23%   where the time went: project bars for the week or month on top, the last 30 days
+                 under it (8 projects plus Other each; a panel scrolls inside if it runs short)
    Ratios: the bars never need more than about 540px of width, while Next moves titles and reasons
    wrap less with every extra pixel, so the right column gives 2% to the left. The centre stays at 47%:
    any wider and the year grid's cells grow taller and This week would have to scroll at 940px high.
@@ -116,9 +126,9 @@
     grid-template-columns: minmax(0, 30fr) minmax(0, 47fr) minmax(0, 23fr);
     grid-template-rows: auto minmax(calc(var(--space-12) * 4), auto) 1fr;
     grid-template-areas:
-      "act kpis bars"
-      "act week bars"
-      "act heat bars";
+      "act kpis side"
+      "act week side"
+      "act heat side";
   }
 
   .act {
@@ -141,8 +151,22 @@
     min-height: 0;
   }
 
-  .week,
-  .bars {
+  .week {
+    min-height: 0;
+  }
+
+  /* The two Time by project panels share the right column evenly; each scrolls inside if it runs short. */
+  .side {
+    grid-area: side;
+    display: flex;
+    flex-direction: column;
+    gap: var(--grid-gap);
+    min-height: 0;
+  }
+
+  .bars,
+  .bars30 {
+    flex: 1 1 0;
     min-height: 0;
   }
 }
